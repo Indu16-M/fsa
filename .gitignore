@@ -61,6 +61,9 @@ venv.bak/
 *.sln
 *.sw?
 
-# OS files
+# OS & Temporary files
 .DS_Store
 Thumbs.db
+~$*.xlsx
+*.xlsx
+

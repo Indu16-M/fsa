@@ -6,6 +6,8 @@ import Register from './pages/Register';
 import DonorDashboard from './pages/DonorDashboard';
 import NgoDashboard from './pages/NgoDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import LiveTrackingPage from './pages/LiveTrackingPage';
+import HomePage from './pages/HomePage';
 
 // Route Guard to verify user has logged in and has the right role
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -15,8 +17,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" replace />;
   }
   
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // If unauthorized for this dashboard, redirect to their role's default dashboard
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     if (user.role === 'admin') return <Navigate to="/admin" replace />;
     if (user.role === 'donor') return <Navigate to="/donor" replace />;
     return <Navigate to="/ngo" replace />;
@@ -30,10 +31,12 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      <Route path="/" element={<HomePage />} />
+
       <Route path="/login" element={
         token ? (
-          user.role === 'admin' ? <Navigate to="/admin" replace /> :
-          user.role === 'donor' ? <Navigate to="/donor" replace /> :
+          user?.role === 'admin' ? <Navigate to="/admin" replace /> :
+          user?.role === 'donor' ? <Navigate to="/donor" replace /> :
           <Navigate to="/ngo" replace />
         ) : <Login />
       } />
@@ -58,8 +61,11 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
+      <Route path="/tracking" element={<LiveTrackingPage />} />
+      <Route path="/mobile" element={<MobileAppView />} />
+      
       {/* Fallback redirects */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/tracking" replace />} />
     </Routes>
   );
 };

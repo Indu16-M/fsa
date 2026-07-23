@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { UserPlus, Sun, Moon } from 'lucide-react';
+import LocationPickerModal from '../components/LocationPickerModal';
+import { UserPlus, Sun, Moon, MapPin } from 'lucide-react';
 
 const Register = () => {
   const { registerUser, theme, toggleTheme } = useAuth();
@@ -16,6 +14,7 @@ const Register = () => {
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState('12.9716');
   const [longitude, setLongitude] = useState('77.5946');
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
   // NGO Specific fields
   const [orgName, setOrgName] = useState('');
@@ -28,6 +27,7 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -184,6 +184,21 @@ const Register = () => {
             </div>
           </div>
 
+          <div style={{ marginBottom: '1rem', backgroundColor: 'var(--bg-tertiary)', padding: '0.85rem 1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid var(--border-color)' }}>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Map Location Pin</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lat: {latitude}, Lon: {longitude}</div>
+            </div>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'var(--primary-color)', color: '#fff' }}
+              onClick={() => setIsMapModalOpen(true)}
+            >
+              <MapPin size={14} /> Pick on Map
+            </button>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label" htmlFor="latitude">Latitude</label>
@@ -209,6 +224,19 @@ const Register = () => {
               />
             </div>
           </div>
+
+          <LocationPickerModal
+            isOpen={isMapModalOpen}
+            onClose={() => setIsMapModalOpen(false)}
+            initialLat={parseFloat(latitude) || 12.9716}
+            initialLon={parseFloat(longitude) || 77.5946}
+            onSelectLocation={(loc) => {
+              setLatitude(loc.latitude.toString());
+              setLongitude(loc.longitude.toString());
+              if (loc.address) setAddress(loc.address);
+            }}
+          />
+
 
           {/* NGO SPECIFIC SECTIONS */}
           {role === 'ngo' && (

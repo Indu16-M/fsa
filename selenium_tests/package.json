@@ -1,0 +1,14 @@
+{
+  "name": "foodshare-selenium-tests",
+  "version": "1.0.0",
+  "description": "Node.js Selenium E2E Test Suite and Excel Analysis Reporter for FoodShare AI Platform",
+  "main": "run_selenium_tests.js",
+  "type": "module",
+  "scripts": {
+    "test": "node run_selenium_tests.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "selenium-webdriver": "^4.25.0"
+  }
+}

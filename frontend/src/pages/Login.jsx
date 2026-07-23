@@ -107,6 +107,51 @@ const Login = () => {
           </button>
         </form>
 
+        {/* 1-CLICK INSTANT AUTO LOGIN BUTTONS */}
+        <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.75rem', textAlign: 'center' }}>
+            ⚡ 1-Click Demo Auto Logins (No Typing Required)
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '0.5rem', fontSize: '0.85rem', backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)', fontWeight: 700 }}
+              onClick={async () => {
+                const u = await login('grand_hotel', 'password123');
+                if (u) navigate('/donor');
+              }}
+            >
+              🏨 Auto-Login as Food Donor (Grand Hotel)
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '0.5rem', fontSize: '0.85rem', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 700 }}
+              onClick={async () => {
+                const u = await login('feed_the_hungry', 'password123');
+                if (u) navigate('/ngo');
+              }}
+            >
+              🍲 Auto-Login as NGO (Feed The Hungry)
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '0.5rem', fontSize: '0.85rem' }}
+              onClick={async () => {
+                const u = await login('admin_user', 'password123');
+                if (u) navigate('/admin');
+              }}
+            >
+              🛡️ Auto-Login as System Admin
+            </button>
+          </div>
+        </div>
+
         <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
           Don't have an account?{' '}
           <Link to="/register" style={{ color: 'var(--primary-color)', fontWeight: 600 }}>

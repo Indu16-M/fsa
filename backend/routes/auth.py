@@ -123,3 +123,34 @@ def profile():
         user_data['ngo_profile'] = user.ngo_profile.to_dict()
         
     return jsonify(user_data), 200
+
+@auth_bp.route('/location', methods=['PATCH'])
+@jwt_required()
+def update_location():
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+        
+    data = request.get_json() or {}
+    lat = data.get('latitude')
+    lon = data.get('longitude')
+    address = data.get('address')
+    
+    if lat is not None:
+        user.latitude = float(lat)
+    if lon is not None:
+        user.longitude = float(lon)
+    if address is not None:
+        user.address = str(address)
+        
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': 'User location updated successfully',
+            'user': user.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f"Failed to update location: {str(e)}"}), 500
+

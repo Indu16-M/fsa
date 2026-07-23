@@ -1,0 +1,14 @@
+{
+  "name": "foodshare-appium-tests",
+  "version": "1.0.0",
+  "description": "Node.js Appium Mobile E2E Test Suite and Excel Analysis Reporter for FoodShare AI Android Platform",
+  "main": "run_appium_tests.js",
+  "type": "module",
+  "scripts": {
+    "test": "node run_appium_tests.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "webdriverio": "^8.38.0"
+  }
+}

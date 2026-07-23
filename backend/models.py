@@ -147,6 +147,22 @@ class DonationRequest(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+import math
+
+def calculate_haversine_distance(lat1, lon1, lat2, lon2):
+    try:
+        lat1, lon1, lat2, lon2 = float(lat1 or 0), float(lon1 or 0), float(lat2 or 0), float(lon2 or 0)
+        if lat1 == 0 and lon1 == 0 or lat2 == 0 and lon2 == 0:
+            return 0.0
+        R = 6371.0 # Earth radius in km
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return round(R * c, 2)
+    except Exception:
+        return 0.0
+
 class Delivery(db.Model):
     __tablename__ = 'deliveries'
     
@@ -164,6 +180,16 @@ class Delivery(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     
     def to_dict(self):
+        donor_lat = self.donation.donor.latitude if (self.donation and self.donation.donor) else 0.0
+        donor_lon = self.donation.donor.longitude if (self.donation and self.donation.donor) else 0.0
+        ngo_lat = self.request.ngo.latitude if (self.request and self.request.ngo) else 0.0
+        ngo_lon = self.request.ngo.longitude if (self.request and self.request.ngo) else 0.0
+        curr_lat = self.current_latitude if self.current_latitude is not None else donor_lat
+        curr_lon = self.current_longitude if self.current_longitude is not None else donor_lon
+
+        distance_km = calculate_haversine_distance(curr_lat, curr_lon, ngo_lat, ngo_lon)
+        eta_minutes = int(round((distance_km / 25.0) * 60)) if distance_km > 0 else 0
+
         return {
             'id': self.id,
             'donation_id': self.donation_id,
@@ -175,17 +201,20 @@ class Delivery(db.Model):
             'volunteer_phone': self.volunteer_phone,
             'tracking_status': self.tracking_status,
             'verification_code': self.verification_code,
-            'current_latitude': self.current_latitude,
-            'current_longitude': self.current_longitude,
-            'donor_latitude': self.donation.donor.latitude if (self.donation and self.donation.donor) else 0.0,
-            'donor_longitude': self.donation.donor.longitude if (self.donation and self.donation.donor) else 0.0,
+            'current_latitude': curr_lat,
+            'current_longitude': curr_lon,
+            'donor_latitude': donor_lat,
+            'donor_longitude': donor_lon,
             'donor_address': self.donation.donor.address if (self.donation and self.donation.donor) else '',
-            'ngo_latitude': self.request.ngo.latitude if (self.request and self.request.ngo) else 0.0,
-            'ngo_longitude': self.request.ngo.longitude if (self.request and self.request.ngo) else 0.0,
+            'ngo_latitude': ngo_lat,
+            'ngo_longitude': ngo_lon,
             'ngo_address': self.request.ngo.address if (self.request and self.request.ngo) else '',
+            'distance_km': distance_km,
+            'eta_minutes': eta_minutes,
             'started_at': self.started_at.isoformat(),
             'completed_at': self.completed_at.isoformat() if self.completed_at else None
         }
+
 
 
 class ChatMessage(db.Model):

@@ -283,6 +283,12 @@ const NgoDashboard = () => {
       <header className="navbar">
         <div className="logo">🍲 FoodShare AI</div>
         <div className="nav-links">
+          <button onClick={() => navigate('/tracking')} className="btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}>
+            🗺️ Live Delivery Map
+          </button>
+          <button onClick={() => navigate('/mobile')} className="btn btn-secondary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            📱 Mobile App View
+          </button>
           <span style={{ fontWeight: 600 }}>Hello, {user?.username} (NGO)</span>
           <button onClick={logout} className="btn btn-secondary" style={{ padding: '0.4rem 1rem' }}>Log Out</button>
         </div>
