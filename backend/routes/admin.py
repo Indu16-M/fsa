@@ -15,6 +15,22 @@ def admin_required(user_id):
     user = User.query.get(user_id)
     return user and user.role == 'admin'
 
+@admin_bp.route('/ngos/all', methods=['GET'])
+@jwt_required()
+def all_ngos():
+    admin_id = int(get_jwt_identity())
+    if not admin_required(admin_id):
+        return jsonify({'message': 'Access forbidden. Admin role required.'}), 403
+        
+    ngos = User.query.filter_by(role='ngo').all()
+    results = []
+    for user in ngos:
+        user_data = user.to_dict()
+        user_data['ngo_profile'] = user.ngo_profile.to_dict() if user.ngo_profile else {}
+        results.append(user_data)
+        
+    return jsonify(results), 200
+
 @admin_bp.route('/ngos/pending', methods=['GET'])
 @jwt_required()
 def pending_ngos():
@@ -45,6 +61,7 @@ def approve_ngo(ngo_id):
     ngo.status = 'active'
     if ngo.ngo_profile:
         ngo.ngo_profile.verified = True
+        ngo.ngo_profile.rejection_reason = ''
         
     try:
         db.session.commit()
@@ -52,6 +69,34 @@ def approve_ngo(ngo_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f"Failed to approve NGO: {str(e)}"}), 500
+
+@admin_bp.route('/ngos/<int:ngo_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_ngo(ngo_id):
+    admin_id = int(get_jwt_identity())
+    if not admin_required(admin_id):
+        return jsonify({'message': 'Access forbidden. Admin role required.'}), 403
+        
+    ngo = User.query.get_or_404(ngo_id)
+    if ngo.role != 'ngo':
+        return jsonify({'message': 'User is not an NGO.'}), 400
+
+    data = request.get_json() or {}
+    rejection_reason = data.get('rejection_reason', 'Documents did not meet platform guidelines.').strip()
+        
+    ngo.status = 'rejected'
+    if ngo.ngo_profile:
+        ngo.ngo_profile.verified = False
+        ngo.ngo_profile.rejection_reason = rejection_reason
+        
+    try:
+        db.session.commit()
+        return jsonify({'message': f"NGO '{ngo.username}' application rejected.", 'rejection_reason': rejection_reason}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f"Failed to reject NGO: {str(e)}"}), 500
+
+
 
 @admin_bp.route('/users', methods=['GET'])
 @jwt_required()

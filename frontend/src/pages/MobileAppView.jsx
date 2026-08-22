@@ -69,9 +69,10 @@ const MobileAppView = () => {
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>
-          <Smartphone size={22} /> FoodShare AI Mobile Simulator
+          <Smartphone size={22} /> ShareBite Mobile Simulator
         </div>
       </div>
+
 
       {/* Main Container */}
       <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 420px', gap: '2rem', alignItems: 'start' }}>
@@ -130,7 +131,8 @@ const MobileAppView = () => {
 
           {/* Mobile Screen Header */}
           <div style={{ backgroundColor: '#111827', padding: '0.75rem 1rem', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#10b981' }}>🍲 FoodShare Mobile</span>
+            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#10b981' }}>🍲 ShareBite Mobile</span>
+
             <div style={{ display: 'flex', gap: '0.3rem' }}>
               {['donor', 'ngo', 'map'].map(tab => (
                 <button

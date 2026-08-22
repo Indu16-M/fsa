@@ -19,6 +19,22 @@ const LocationPickerModal = ({ isOpen, onClose, initialLat = 12.9716, initialLon
     { name: 'Whitefield', lat: 12.9698, lon: 77.7500 }
   ];
 
+  const fetchAddress = async (lat, lon) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.display_name) {
+          setAddressInput(data.display_name);
+        } else {
+          setAddressInput(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`);
+        }
+      }
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen || !window.L || !mapContainerRef.current) return;
 
@@ -57,6 +73,7 @@ const LocationPickerModal = ({ isOpen, onClose, initialLat = 12.9716, initialLon
       const position = marker.getLatLng();
       setSelectedLat(position.lat);
       setSelectedLon(position.lng);
+      fetchAddress(position.lat, position.lng);
     });
 
     // Map click event
@@ -65,6 +82,7 @@ const LocationPickerModal = ({ isOpen, onClose, initialLat = 12.9716, initialLon
       setSelectedLat(lat);
       setSelectedLon(lng);
       marker.setLatLng([lat, lng]);
+      fetchAddress(lat, lng);
     });
 
     return () => {
@@ -83,6 +101,34 @@ const LocationPickerModal = ({ isOpen, onClose, initialLat = 12.9716, initialLon
     if (leafletMap.current && markerRef.current) {
       leafletMap.current.setView([preset.lat, preset.lon], 15);
       markerRef.current.setLatLng([preset.lat, preset.lon]);
+    }
+  };
+
+  const handleLocateMe = () => {
+    if ('geolocation' in navigator) {
+      setAddressInput("Locating...");
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          setSelectedLat(lat);
+          setSelectedLon(lon);
+          
+          if (leafletMap.current && markerRef.current) {
+            leafletMap.current.setView([lat, lon], 16);
+            markerRef.current.setLatLng([lat, lon]);
+          }
+          
+          fetchAddress(lat, lon);
+        },
+        (error) => {
+          console.error("Error getting location: ", error);
+          alert("Unable to retrieve your location. Please check your browser permissions.");
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
     }
   };
 
@@ -129,7 +175,7 @@ const LocationPickerModal = ({ isOpen, onClose, initialLat = 12.9716, initialLon
           padding: '1.25rem 1.5rem',
           borderBottom: '1px solid var(--border-color, #e2e8f0)',
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -147,10 +193,29 @@ const LocationPickerModal = ({ isOpen, onClose, initialLat = 12.9716, initialLon
 
         {/* Body */}
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Preset Buttons */}
+          {/* Preset Buttons & Locate Me */}
           <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-              Quick Presets
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Quick Presets</span>
+              <button 
+                type="button" 
+                onClick={handleLocateMe}
+                style={{
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.75rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: 'var(--primary-color)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem'
+                }}
+              >
+                <Navigation size={12} /> Locate Me
+              </button>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               {presets.map((p, i) => (

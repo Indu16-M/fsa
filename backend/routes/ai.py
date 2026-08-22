@@ -102,3 +102,103 @@ def recommend_ngos_for_donation(donation_id):
     ngos = User.query.filter_by(role='ngo').all()
     recommendations = recommend_ngos(donation, ngos)
     return jsonify(recommendations), 200
+
+@ai_bp.route('/food-check', methods=['POST'])
+@jwt_required()
+def food_check():
+    # Simulate an AI visual check of an uploaded food image
+    import time
+    import random
+    
+    # In a real scenario, we would parse request.files['image'] and run a CV model.
+    # Here, we simulate the processing time and outcome based on the category.
+    food_category = request.form.get('category', 'unknown').lower()
+    
+    # Mock delay to simulate "AI Processing"
+    time.sleep(1.5)
+    
+    confidence = random.randint(85, 98)
+    
+    if food_category in ['produce', 'vegetables', 'fruits']:
+        status = "Appears fresh and suitable for sharing"
+        freshness = "Good"
+        recommendation = "Share within 48 hours."
+    elif food_category in ['cooked', 'cooked meals', 'rice', 'curries']:
+        status = "Appears suitable, ensure temperature control"
+        freshness = "Fair"
+        recommendation = "Share as soon as possible (within 3-4 hours)."
+    elif food_category in ['packaged', 'packaged food', 'snacks']:
+        status = "Package appears intact"
+        freshness = "Excellent"
+        recommendation = "Check printed expiry date before sharing."
+        confidence = random.randint(95, 99)
+    else:
+        status = "Appears suitable for sharing"
+        freshness = "Good"
+        recommendation = "Share promptly."
+        
+    # Introduce a rare chance of a warning for realism
+    if random.random() < 0.05:
+        status = "Potential spoilage detected"
+        freshness = "Poor"
+        recommendation = "WARNING: Food may be unsafe for consumption. Please physically inspect before donating."
+        confidence = random.randint(70, 85)
+        
+    return jsonify({
+        'status': status,
+        'freshness': freshness,
+        'confidence': f"{confidence}%",
+        'recommendation': recommendation
+    }), 200
+
+@ai_bp.route('/chat', methods=['POST'])
+@jwt_required()
+def ai_chat():
+    """
+    Simulated AI Chatbot for food storage and donation advice.
+    Now context-aware (ShareWise AI).
+    """
+    import time
+    
+    data = request.get_json() or {}
+    message = data.get('message', '').lower()
+    context = data.get('context', {})
+    pathname = context.get('pathname', '')
+    
+    # Simulate processing time
+    time.sleep(1.0)
+    
+    response_text = "I'm ShareWise AI. I can help you with food safety, storage guidelines, and best practices for donating surplus food. How can I help?"
+    
+    # Context-aware responses
+    if 'how does pickup work' in message or 'delivery' in message:
+        response_text = "There are no delivery drivers in ShareBite! The Individual Receiver or NGO who claims your food travels directly to your location to pick it up."
+    elif 'where is my food' in message or 'track' in message:
+        response_text = "Check your Active Pickups! Once a Receiver or NGO claims your food, they will mark when they are 'On the Way' and 'Arrived'."
+    elif 'how do i donate food' in message:
+        response_text = "Donating is easy! Go to your Donor Dashboard, click 'Donate Food', fill in the details, and submit. Your exact location remains hidden until a verified Receiver or NGO claims the food. Then they will travel to you!"
+    elif 'who can claim' in message or 'who gets the food' in message:
+        response_text = "Both verified NGOs and Individual Receivers can browse available surplus food and claim it. They must travel to your location to collect it."
+        
+    # Standard food storage responses
+    elif any(word in message for word in ['rice', 'cooked rice']):
+        response_text = "Cooked rice should be cooled quickly and refrigerated within 1 hour of cooking. It can be safely stored in the fridge for up to 3-4 days at below 5°C. When donating, please ensure it hasn't been sitting at room temperature!"
+    elif any(word in message for word in ['curry', 'stew', 'gravy']):
+        response_text = "Curries and stews are great for donation! They can be stored in the fridge for up to 3-4 days. For maximum freshness, store them in shallow airtight containers so they cool rapidly."
+    elif any(word in message for word in ['vegetable', 'veg', 'produce', 'fruit']):
+        response_text = "Fresh produce is always welcome. Keep leafy greens in the crisper drawer with high humidity, and store apples separately as they release ethylene gas which can ripen other fruits faster."
+    elif any(word in message for word in ['milk', 'dairy', 'cheese', 'paneer']):
+        response_text = "Dairy products are highly perishable. Store them at the back of the fridge (the coldest part), not in the door. If donating, please ensure the cold chain is maintained!"
+    elif any(word in message for word in ['bread', 'bakery', 'chapati', 'roti']):
+        response_text = "Bread and rotis should be stored at room temperature in a cool, dry place. Avoid the fridge as it makes them stale faster. If you need to store them longer, freezing is the best option."
+    elif any(word in message for word in ['how long', 'store', 'expiry']):
+        response_text = "As a general rule for cooked food: store in the fridge below 5°C for no more than 3-4 days, or freeze for up to 2-3 months. Never leave cooked food at room temperature for more than 2 hours."
+    elif any(word in message for word in ['hello', 'hi', 'hey']):
+        response_text = "Hello! I'm ShareWise AI 👋 I can answer questions about food storage, shelf-life, and donation guidelines. What do you have to share today?"
+    elif 'thank' in message:
+        response_text = "You're very welcome! Thank you for using ShareByte to help others. Let me know if you need any more tips!"
+        
+    return jsonify({
+        'reply': response_text
+    }), 200
+

@@ -1,17 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Navigation, Play, Square, MapPin, Clock, Bike, CheckCircle2, Copy, ShieldCheck, Gauge } from 'lucide-react';
+import { ShieldCheck, Copy, CheckCircle2 } from 'lucide-react';
 
-const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
+const TrackingMap = ({ delivery, onLocationUpdate }) => {
   const mapContainerRef = useRef(null);
   const leafletMap = useRef(null);
   const markersRef = useRef({});
-  const polylineTraveledRef = useRef(null);
-  const polylineRemainingRef = useRef(null);
+  const polylineActiveRef = useRef(null);
   
-  const [simulationActive, setSimulationActive] = useState(false);
-  const [simSpeed, setSimSpeed] = useState(1); // 1x, 2x, 4x speed
   const [copiedCode, setCopiedCode] = useState(false);
-  const simInterval = useRef(null);
 
   // Extract coordinates with defaults
   const donorLat = delivery?.donor_latitude || 12.9352;
@@ -72,7 +68,7 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
             🍲
           </div>
           <div style="position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-            DROPOFF
+            RECIPIENT
           </div>
         </div>`,
       className: 'custom-map-icon',
@@ -95,42 +91,35 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
     // Add Donor & NGO Markers
     markersRef.current.donor = window.L.marker([donorLat, donorLon], { icon: donorIcon })
       .addTo(map)
-      .bindPopup(`<b>Pickup Location (Donor)</b><br/>${delivery?.donation_title || 'Food Donation'}<br/>${delivery?.donor_address || ''}`);
-
-    markersRef.current.ngo = window.L.marker([ngoLat, ngoLon], { icon: ngoIcon })
-      .addTo(map)
-      .bindPopup(`<b>Dropoff Location (NGO)</b><br/>${delivery?.ngo_name || 'NGO Recipient'}<br/>${delivery?.ngo_address || ''}`);
+      .bindPopup(`<b>Your Pickup Location</b><br/>${delivery?.donation_title || 'Food Donation'}`);
 
     // Add Driver Marker
     markersRef.current.driver = window.L.marker([currentLat, currentLon], { icon: driverIcon })
       .addTo(map)
-      .bindPopup(`<b>Live Delivery Driver</b><br/>Status: ${trackingStatus.toUpperCase()}<br/>Volunteer: ${delivery?.volunteer_name || 'Assigned Volunteer'}`);
+      .bindPopup(`<b>Pickup Partner</b><br/>${delivery?.volunteer_name || 'Assigned Partner'}`);
 
-    // Polylines
-    polylineTraveledRef.current = window.L.polyline([[donorLat, donorLon], [currentLat, currentLon]], {
+    markersRef.current.ngo = window.L.marker([ngoLat, ngoLon], { icon: ngoIcon })
+      .addTo(map)
+      .bindPopup(`<b>NGO / Recipient</b><br/>${delivery?.ngo_name || 'NGO Recipient'}`);
+
+    const isPhase1 = ['assigned', 'arrived_at_pickup'].includes(trackingStatus);
+    const targetLat = isPhase1 ? donorLat : ngoLat;
+    const targetLon = isPhase1 ? donorLon : ngoLon;
+
+    polylineActiveRef.current = window.L.polyline([[currentLat, currentLon], [targetLat, targetLon]], {
       color: '#3b82f6',
       weight: 5,
       opacity: 0.9,
-      lineCap: 'round'
+      lineCap: 'round',
+      dashArray: isPhase1 ? null : '6, 10'
     }).addTo(map);
 
-    polylineRemainingRef.current = window.L.polyline([[currentLat, currentLon], [ngoLat, ngoLon]], {
-      color: '#94a3b8',
-      weight: 4,
-      dashArray: '6, 10',
-      opacity: 0.7
-    }).addTo(map);
-
-    // Fit bounds to fit route
-    const bounds = window.L.latLngBounds([[donorLat, donorLon], [ngoLat, ngoLon]]);
+    const bounds = window.L.latLngBounds([
+      [donorLat, donorLon],
+      [ngoLat, ngoLon],
+      [currentLat, currentLon]
+    ]);
     map.fitBounds(bounds, { padding: [60, 60] });
-
-    // Map click for manual driver placement
-    if (isEditable && onLocationUpdate) {
-      map.on('click', (e) => {
-        onLocationUpdate(e.latlng.lat, e.latlng.lng);
-      });
-    }
 
     return () => {
       if (leafletMap.current) {
@@ -140,57 +129,39 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
     };
   }, []);
 
-  // Update Driver position & polyline paths on props change
+  // Update Driver, Donor & NGO positions & polyline paths on props change
   useEffect(() => {
-    if (markersRef.current.driver && currentLat !== undefined && currentLon !== undefined) {
-      markersRef.current.driver.setLatLng([currentLat, currentLon]);
+    if (leafletMap.current) {
+      if (markersRef.current.donor) markersRef.current.donor.setLatLng([donorLat, donorLon]);
+      if (markersRef.current.ngo) markersRef.current.ngo.setLatLng([ngoLat, ngoLon]);
+      if (markersRef.current.driver) markersRef.current.driver.setLatLng([currentLat, currentLon]);
 
-      if (polylineTraveledRef.current) {
-        polylineTraveledRef.current.setLatLngs([[donorLat, donorLon], [currentLat, currentLon]]);
-      }
-      if (polylineRemainingRef.current) {
-        polylineRemainingRef.current.setLatLngs([[currentLat, currentLon], [ngoLat, ngoLon]]);
+      const isPhase1 = ['assigned', 'arrived_at_pickup'].includes(trackingStatus);
+      const targetLat = isPhase1 ? donorLat : ngoLat;
+      const targetLon = isPhase1 ? donorLon : ngoLon;
+
+      if (polylineActiveRef.current) {
+        polylineActiveRef.current.setLatLngs([[currentLat, currentLon], [targetLat, targetLon]]);
+        // change dash style if phase 2
+        polylineActiveRef.current.setStyle({
+           dashArray: isPhase1 ? null : '6, 10'
+        });
       }
 
-      markersRef.current.driver.getPopup().setContent(
-        `<b>Live Delivery Driver</b><br/>Status: ${trackingStatus.toUpperCase()}<br/>Volunteer: ${delivery?.volunteer_name || 'Assigned Volunteer'}`
-      );
+      if (markersRef.current.driver && markersRef.current.driver.getPopup()) {
+        markersRef.current.driver.getPopup().setContent(
+          `<b>Pickup Partner</b><br/>${delivery?.volunteer_name || 'Assigned Partner'}`
+        );
+      }
+
+      const bounds = window.L.latLngBounds([
+        [donorLat, donorLon],
+        [ngoLat, ngoLon],
+        [currentLat, currentLon]
+      ]);
+      leafletMap.current.fitBounds(bounds, { padding: [60, 60] });
     }
-  }, [currentLat, currentLon, trackingStatus, delivery?.volunteer_name]);
-
-  // Simulation Runner
-  const startSimulation = () => {
-    if (!onLocationUpdate) return;
-    setSimulationActive(true);
-
-    let progress = 0.0;
-    const totalSteps = 40;
-
-    const deltaLat = ngoLat - donorLat;
-    const currentDeltaLat = currentLat - donorLat;
-    if (Math.abs(deltaLat) > 0.0001) {
-      progress = currentDeltaLat / deltaLat;
-      if (progress >= 0.99 || progress < 0) progress = 0.0;
-    }
-
-    simInterval.current = setInterval(() => {
-      progress += (1.0 / totalSteps) * simSpeed;
-      if (progress >= 1.0) {
-        progress = 1.0;
-        clearInterval(simInterval.current);
-        setSimulationActive(false);
-      }
-
-      const nextLat = donorLat + (ngoLat - donorLat) * progress;
-      const nextLon = donorLon + (ngoLon - donorLon) * progress;
-      onLocationUpdate(nextLat, nextLon);
-    }, 1000 / simSpeed);
-  };
-
-  const stopSimulation = () => {
-    if (simInterval.current) clearInterval(simInterval.current);
-    setSimulationActive(false);
-  };
+  }, [donorLat, donorLon, ngoLat, ngoLon, currentLat, currentLon, trackingStatus, delivery?.volunteer_name]);
 
   const copyCodeToClipboard = () => {
     navigator.clipboard.writeText(verificationCode);
@@ -231,68 +202,6 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
         }
       `}</style>
 
-      {/* Swiggy/Zomato Header Card */}
-      <div style={{
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-        color: '#ffffff',
-        padding: '1.25rem',
-        borderRadius: '16px',
-        boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.3)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem'
-      }}>
-        {/* Top Status & Live ETA Row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                backgroundColor: trackingStatus === 'delivered' ? '#10b981' : '#ef4444',
-                boxShadow: `0 0 10px ${trackingStatus === 'delivered' ? '#10b981' : '#ef4444'}`
-              }} />
-              <span style={{ fontSize: '0.8rem', textTransform: 'uppercase', tracking: '1px', color: '#94a3b8', fontWeight: 700 }}>
-                {trackingStatus === 'delivered' ? 'DELIVERY COMPLETED' : 'LIVE TRACKING ACTIVE'}
-              </span>
-            </div>
-            <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
-              {trackingStatus === 'delivered' ? 'Food Arrived Safely 🎉' : `Arriving in ~${etaMinutes} mins`}
-            </h3>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.08)', padding: '0.5rem 1rem', borderRadius: '12px', backdropFilter: 'blur(8px)' }}>
-            <Bike size={20} style={{ color: '#38bdf8' }} />
-            <div>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Distance Remaining</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#38bdf8' }}>{distanceKm} km away</div>
-            </div>
-          </div>
-        </div>
-
-        {/* 4-Step Order Tracker Stepper */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginTop: '0.5rem' }}>
-          {steps.map((step, idx) => {
-            const isDone = idx <= activeStep;
-            const isCurrent = idx === activeStep;
-            return (
-              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', opacity: isDone ? 1 : 0.4 }}>
-                <div style={{
-                  height: '6px',
-                  borderRadius: '3px',
-                  backgroundColor: isDone ? (isCurrent ? '#38bdf8' : '#10b981') : 'rgba(255, 255, 255, 0.2)',
-                  transition: 'all 0.3s ease'
-                }} />
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isDone ? '#ffffff' : '#94a3b8' }}>
-                  {step.label}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Leaflet Map Canvas */}
       <div style={{ position: 'relative' }}>
         <div 
@@ -308,7 +217,7 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
         />
 
         {/* Verification OTP Card Overlay (Bottom Left) */}
-        {verificationCode && (
+        {verificationCode && trackingStatus === 'arrived_at_pickup' && (
           <div style={{
             position: 'absolute',
             bottom: '12px',
@@ -327,7 +236,7 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
           }}>
             <ShieldCheck size={18} style={{ color: '#10b981' }} />
             <div>
-              <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase' }}>Delivery Verification OTP</div>
+              <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase' }}>Pickup Verification OTP</div>
               <div style={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '1px', color: '#38bdf8' }}>{verificationCode}</div>
             </div>
             <button 
@@ -338,75 +247,6 @@ const TrackingMap = ({ delivery, onLocationUpdate, isEditable = false }) => {
             >
               {copiedCode ? <CheckCircle2 size={14} style={{ color: '#10b981' }} /> : <Copy size={14} />}
             </button>
-          </div>
-        )}
-      </div>
-
-      {/* Control Toolbar */}
-      <div style={{
-        padding: '0.9rem 1.25rem',
-        backgroundColor: 'var(--bg-tertiary)',
-        borderRadius: '14px',
-        display: 'flex',
-        justify: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
-        border: '1px solid var(--border-color)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-          <Navigation size={16} className="text-secondary" />
-          <span style={{ fontWeight: 600 }}>Driver Coordinates:</span>
-          <code style={{ fontSize: '0.8rem', backgroundColor: 'var(--bg-primary)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
-            {currentLat.toFixed(4)}, {currentLon.toFixed(4)}
-          </code>
-        </div>
-
-        {isEditable && onLocationUpdate && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {/* Speed selector */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: 'var(--bg-primary)', padding: '0.2rem', borderRadius: '8px' }}>
-              <Gauge size={14} className="text-muted" style={{ marginLeft: '4px' }} />
-              {[1, 2, 4].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSimSpeed(s)}
-                  style={{
-                    border: 'none',
-                    background: simSpeed === s ? 'var(--primary-color)' : 'transparent',
-                    color: simSpeed === s ? '#fff' : 'var(--text-secondary)',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {s}x
-                </button>
-              ))}
-            </div>
-
-            {!simulationActive ? (
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                style={{ padding: '0.45rem 0.9rem', fontSize: '0.8rem', backgroundColor: 'var(--primary-color)', color: '#fff' }}
-                onClick={startSimulation}
-              >
-                <Play size={14} /> Live Route Sim
-              </button>
-            ) : (
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                style={{ padding: '0.45rem 0.9rem', fontSize: '0.8rem', backgroundColor: '#ef4444', color: '#fff' }}
-                onClick={stopSimulation}
-              >
-                <Square size={14} /> Pause Sim
-              </button>
-            )}
           </div>
         )}
       </div>

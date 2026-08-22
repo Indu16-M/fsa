@@ -1,8 +1,10 @@
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { UserPlus, Sun, Moon, MapPin } from 'lucide-react';
 
 const Register = () => {
-  const { registerUser, theme, toggleTheme } = useAuth();
   const navigate = useNavigate();
 
   // General fields
@@ -24,10 +26,69 @@ const Register = () => {
   const [preferredFood, setPreferredFood] = useState('cooked,bakery,produce,dry');
   const [website, setWebsite] = useState('');
 
+  // OTP Email Verification states
+  const { registerUser, sendOtp, verifyOtp, theme, toggleTheme } = useAuth();
+
+  const [otpCode, setOtpCode] = useState('');
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  const [isOtpVerified, setIsOtpVerified] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Resend cooldown timer effect
+  React.useEffect(() => {
+    let timer;
+    if (cooldown > 0) {
+      timer = setInterval(() => {
+        setCooldown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  const handleSendOtp = async () => {
+    if (!email || !email.includes('@')) {
+      setError('Please enter a valid email address first.');
+      return;
+    }
+    setError('');
+    setSuccess('');
+    setOtpSending(true);
+
+    try {
+      const res = await sendOtp(email, 'registration');
+      setIsOtpSent(true);
+      setCooldown(60);
+      setSuccess(res.message || 'Verification code sent to your real email inbox!');
+    } catch (err) {
+      setError(err.message || 'Failed to send verification code. Check email address.');
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length < 6) {
+      setError('Please enter the full 6-digit verification code.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await verifyOtp(email, otpCode, 'registration');
+      setIsOtpVerified(true);
+      setSuccess(res.message || 'Email verified successfully! You can now submit registration.');
+    } catch (err) {
+      setError(err.message || 'Invalid or expired verification code.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,6 +99,11 @@ const Register = () => {
 
     if (role === 'ngo' && (!orgName || !regNum)) {
       setError('NGO Organization Name and Registration Number are required.');
+      return;
+    }
+
+    if (!isOtpVerified && !otpCode) {
+      setError('Please request and enter your 6-digit email verification code.');
       return;
     }
 
@@ -53,6 +119,7 @@ const Register = () => {
       address,
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
+      otp_code: otpCode,
       ...(role === 'ngo' && {
         organization_name: orgName,
         registration_number: regNum,
@@ -75,6 +142,7 @@ const Register = () => {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="auth-page" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '120vh', padding: '2rem' }}>
@@ -127,9 +195,59 @@ const Register = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@domain.com"
+                disabled={isOtpVerified}
               />
             </div>
           </div>
+
+          {/* REAL EMAIL OTP VERIFICATION BOX */}
+          <div style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>📧 Real Email Verification</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>A 6-digit verification code will be delivered to your inbox</div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', fontWeight: 700 }}
+                onClick={handleSendOtp}
+                disabled={otpSending || cooldown > 0 || isOtpVerified || !email}
+              >
+                {isOtpVerified ? '✅ Verified' : otpSending ? 'Sending...' : cooldown > 0 ? `Resend (${cooldown}s)` : isOtpSent ? 'Resend Code' : 'Send OTP'}
+              </button>
+            </div>
+
+            {isOtpSent && !isOtpVerified && (
+              <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  maxLength={6}
+                  className="form-control"
+                  placeholder="Enter 6-digit code"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  style={{ letterSpacing: '4px', fontWeight: 800, fontSize: '1.1rem', textAlign: 'center', width: '180px' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                  onClick={handleVerifyOtp}
+                  disabled={loading || otpCode.length < 6}
+                >
+                  Verify Code
+                </button>
+              </div>
+            )}
+
+            {isOtpVerified && (
+              <div style={{ color: 'var(--safe)', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.5rem' }}>
+                ✓ Email verified successfully! You can complete account registration.
+              </div>
+            )}
+          </div>
+
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group">
@@ -153,7 +271,8 @@ const Register = () => {
                 onChange={(e) => setRole(e.target.value)}
               >
                 <option value="donor">Food Donor (Restaurant, Hotel, Household)</option>
-                <option value="ngo">NGO / Food Receiver</option>
+                <option value="ngo">NGO (Organization)</option>
+                <option value="receiver">Individual Food Receiver</option>
               </select>
             </div>
           </div>

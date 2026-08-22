@@ -25,7 +25,9 @@ class MapDeliveryTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         
         with self.app.app_context():
+            db.drop_all()
             db.create_all()
+
             
             # Setup Donor (Koramangala, Bengaluru: 12.9352, 77.6245)
             self.donor = User(

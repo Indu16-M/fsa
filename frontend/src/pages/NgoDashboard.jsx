@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, ClipboardList, MessageSquare, CheckSquare, RefreshCw, Bell } from 'lucide-react';
+import { Search, MapPin, ClipboardList, CheckSquare, RefreshCw, Bell, Navigation, Package } from 'lucide-react';
 import TrackingMap from '../components/TrackingMap';
 
 const NgoDashboard = () => {
@@ -10,27 +10,14 @@ const NgoDashboard = () => {
 
   // Data states
   const [availableFood, setAvailableFood] = useState([]);
-  const [myRequests, setMyRequests] = useState([]);
-  const [myDeliveries, setMyDeliveries] = useState([]);
+  const [myClaims, setMyClaims] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [activeTab, setActiveTab] = useState('browse'); // 'browse', 'requests', 'deliveries', 'notifications'
+  const [activeTab, setActiveTab] = useState('browse'); 
   
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [foodTypeFilter, setFoodTypeFilter] = useState('');
-  
-  // Chat state
-  const [chatMessages, setChatMessages] = useState([]);
-  const [activeChatDonor, setActiveChatDonor] = useState(null); // {id, username, donationId}
-  const [chatText, setChatText] = useState('');
-
-  // Delivery update form
-  const [selectedDelivery, setSelectedDelivery] = useState(null);
-  const [volunteerName, setVolunteerName] = useState('');
-  const [volunteerPhone, setVolunteerPhone] = useState('');
-  const [verifyCode, setVerifyCode] = useState('');
-  const [deliveryError, setDeliveryError] = useState('');
-  const [deliverySuccess, setDeliverySuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -38,42 +25,35 @@ const NgoDashboard = () => {
       return;
     }
     fetchAvailableDonations();
-    fetchRequests();
-    fetchDeliveries();
+    fetchMyClaims();
     fetchNotifications();
   }, [token]);
 
   const fetchAvailableDonations = async () => {
+    setLoading(true);
     try {
-      const url = foodTypeFilter ? `/api/donations?food_type=${foodTypeFilter}` : '/api/donations';
-      const res = await fetch(url);
+      // Use the claims endpoint to get available food with hidden exact location
+      const res = await fetch('/api/claims/available', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setAvailableFood(data);
+        // Optional filtering by food type (could be handled frontend side)
+        let filtered = data;
+        if (foodTypeFilter) filtered = data.filter(d => d.food_type === foodTypeFilter);
+        setAvailableFood(filtered);
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchRequests = async () => {
+  const fetchMyClaims = async () => {
     try {
-      const res = await fetch('/api/ngo/requests', { headers: getAuthHeaders() });
+      const res = await fetch('/api/claims/my-claims', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setMyRequests(data);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const fetchDeliveries = async () => {
-    try {
-      const res = await fetch('/api/ngo/deliveries', { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setMyDeliveries(data);
+        setMyClaims(data);
       }
     } catch (err) {
       console.error(err);
@@ -104,174 +84,44 @@ const NgoDashboard = () => {
     }
   };
 
-  // Submit food donation claim request
-  const submitClaim = async (donationId) => {
+  const claimFood = async (id) => {
     try {
-      const res = await fetch('/api/ngo/requests', {
+      const res = await fetch(`/api/claims/${id}/claim`, {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ donation_id: donationId })
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' })
       });
       const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || 'Request failed');
-      } else {
-        alert('Food request submitted successfully! Pending donor approval.');
+      if (res.ok) {
+        alert("Food Claimed Successfully! See 'Active Pickups' for location details.");
         fetchAvailableDonations();
-        fetchRequests();
+        fetchMyClaims();
+      } else {
+        alert(data.message || "Failed to claim food");
       }
     } catch (err) {
-      console.error(err);
+      alert("Error claiming food.");
     }
   };
 
-  const handleSelectDelivery = (del) => {
-    setSelectedDelivery(del);
-    setVolunteerName(del.volunteer_name || '');
-    setVolunteerPhone(del.volunteer_phone || '');
-    setVerifyCode('');
-    setDeliveryError('');
-    setDeliverySuccess('');
-  };
-
-  const handleLocationUpdate = async (latitude, longitude) => {
-    if (!selectedDelivery) return;
-    
-    setSelectedDelivery(prev => ({
-      ...prev,
-      current_latitude: latitude,
-      current_longitude: longitude,
-      tracking_status: prev.tracking_status === 'picked_up' ? 'in_transit' : prev.tracking_status
-    }));
-
-    setMyDeliveries(prevList => 
-      prevList.map(d => 
-        d.id === selectedDelivery.id 
-          ? { ...d, current_latitude: latitude, current_longitude: longitude, tracking_status: d.tracking_status === 'picked_up' ? 'in_transit' : d.tracking_status }
-          : d
-      )
-    );
-
+  const updateClaimStatus = async (claimId, status, vcode = '') => {
     try {
-      await fetch(`/api/ngo/deliveries/${selectedDelivery.id}/location`, {
+      const res = await fetch(`/api/claims/${claimId}/status`, {
         method: 'PATCH',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ latitude, longitude })
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Update delivery details / volunteer assignment
-  const handleUpdateDelivery = async (e) => {
-    e.preventDefault();
-    setDeliveryError('');
-    setDeliverySuccess('');
-    
-    if (!volunteerName || !volunteerPhone) {
-      setDeliveryError('Volunteer details are required');
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/ngo/deliveries/${selectedDelivery.id}`, {
-        method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          tracking_status: 'picked_up',
-          volunteer_name: volunteerName,
-          volunteer_phone: volunteerPhone
-        })
-      });
-      if (res.ok) {
-        setDeliverySuccess('Volunteer details saved! Delivery status changed to Picked Up.');
-        fetchDeliveries();
-        setTimeout(() => setSelectedDelivery(null), 1500);
-      }
-    } catch (err) {
-      setDeliveryError('Failed to save details');
-    }
-  };
-
-  // Verify delivery with code
-  const verifyAndCompleteDelivery = async (deliveryId) => {
-    setDeliveryError('');
-    setDeliverySuccess('');
-    
-    if (!verifyCode) {
-      setDeliveryError('Enter verification code');
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/ngo/deliveries/${deliveryId}`, {
-        method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          tracking_status: 'delivered',
-          verification_code: verifyCode
-        })
+        body: JSON.stringify({ status, verification_code: vcode })
       });
       const data = await res.json();
       if (res.ok) {
-        setDeliverySuccess('Verification successful! Food donation logged as delivered.');
-        fetchDeliveries();
-        setVerifyCode('');
-        setTimeout(() => setSelectedDelivery(null), 1500);
+        alert(data.message);
+        fetchMyClaims();
       } else {
-        setDeliveryError(data.message || 'Incorrect verification code');
+        alert(data.message);
       }
     } catch (err) {
-      setDeliveryError('Network error');
+      alert("Error updating status.");
     }
   };
 
-  // Chat integration
-  const openChat = async (donationId, donorId, donorName) => {
-    setActiveChatDonor({ id: donorId, username: donorName, donationId });
-    fetchChatMessages(donationId, donorId);
-  };
-
-  const fetchChatMessages = async (donationId, donorId) => {
-    try {
-      const res = await fetch(`/api/chat/messages/${donationId}?partner_id=${donorId}`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setChatMessages(data);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const sendChatMessage = async (e) => {
-    e.preventDefault();
-    if (!chatText || !activeChatDonor) return;
-
-    try {
-      const res = await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          receiver_id: activeChatDonor.id,
-          donation_id: activeChatDonor.donationId,
-          message: chatText
-        })
-      });
-      if (res.ok) {
-        const newMsg = await res.json();
-        setChatMessages(prev => [...prev, newMsg]);
-        setChatText('');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Search filter handler
   const filteredFood = availableFood.filter(food => 
     food.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     food.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -281,33 +131,47 @@ const NgoDashboard = () => {
     <div className="app-container">
       {/* Navbar */}
       <header className="navbar">
-        <div className="logo">🍲 FoodShare AI</div>
+        <div className="logo" style={{ fontWeight: 800 }}>🍲 ShareBite</div>
+
         <div className="nav-links">
-          <button onClick={() => navigate('/tracking')} className="btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#3b82f6', borderColor: '#3b82f6' }}>
-            🗺️ Live Delivery Map
-          </button>
-          <button onClick={() => navigate('/mobile')} className="btn btn-secondary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            📱 Mobile App View
-          </button>
           <span style={{ fontWeight: 600 }}>Hello, {user?.username} (NGO)</span>
           <button onClick={logout} className="btn btn-secondary" style={{ padding: '0.4rem 1rem' }}>Log Out</button>
         </div>
       </header>
 
       <div className="dashboard-layout">
-        {/* Sidebar */}
+        {/* Sidebar Nav */}
         <aside className="sidebar">
-          <div className={`sidebar-menu-item ${activeTab === 'browse' ? 'active' : ''}`} onClick={() => setActiveTab('browse')}>
-            <Search size={18} /> Browse Food
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem', paddingLeft: '0.5rem' }}>
+            📌 SIDEBAR TABS
           </div>
-          <div className={`sidebar-menu-item ${activeTab === 'requests' ? 'active' : ''}`} onClick={() => setActiveTab('requests')}>
-            <ClipboardList size={18} /> My Requests
+          <div 
+            className={`sidebar-menu-item ${activeTab === 'browse' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('browse')}
+            style={{ fontWeight: 700, fontSize: '0.95rem' }}
+          >
+            <Search size={20} color="#10b981" /> Browse Available Food
           </div>
-          <div className={`sidebar-menu-item ${activeTab === 'deliveries' ? 'active' : ''}`} onClick={() => setActiveTab('deliveries')}>
-            <CheckSquare size={18} /> Volunteer & Deliveries
+          <div 
+            className={`sidebar-menu-item ${activeTab === 'pickups' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('pickups')}
+            style={{ fontWeight: 700, fontSize: '0.95rem' }}
+          >
+            <CheckSquare size={20} color="#3b82f6" /> Active Pickups ({myClaims.filter(c => c.status !== 'COMPLETED' && c.status !== 'CANCELLED').length})
           </div>
-          <div className={`sidebar-menu-item ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')} style={{ position: 'relative' }}>
-            <Bell size={18} /> Notifications
+          <div 
+            className={`sidebar-menu-item ${activeTab === 'history' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('history')}
+            style={{ fontWeight: 700, fontSize: '0.95rem' }}
+          >
+            <ClipboardList size={20} /> History
+          </div>
+          <div 
+            className={`sidebar-menu-item ${activeTab === 'notifications' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('notifications')} 
+            style={{ position: 'relative', fontWeight: 700, fontSize: '0.95rem' }}
+          >
+            <Bell size={20} /> Notifications
             {notifications.filter(n => !n.is_read).length > 0 && (
               <span className="notif-badge">{notifications.filter(n => !n.is_read).length}</span>
             )}
@@ -349,198 +213,141 @@ const NgoDashboard = () => {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                {filteredFood.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>No surplus food matching filters found.</p> : 
-                  filteredFood.map(don => (
-                    <div key={don.id} className="food-card">
-                      <div className="food-card-img" style={{ backgroundImage: don.image_url ? `url(${don.image_url})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                        {!don.image_url && <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', fontSize: '3rem' }}>🍲</div>}
-                        <span className={`food-card-badge ${
-                          don.risk_level === 'Safe' ? 'risk-safe' : 
-                          don.risk_level === 'Medium Risk' ? 'risk-medium' : 'risk-high'
-                        }`}>
-                          {don.risk_level}
-                        </span>
-                      </div>
-                      <div className="food-card-body">
-                        <h4 className="food-card-title">{don.title}</h4>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>{don.description}</p>
-                        <p className="food-card-meta">
-                          <MapPin size={14} /> Located at: {don.donor_address}
-                        </p>
-                        <p className="food-card-meta">Qty: {don.quantity} {don.quantity_unit} | Storage: {don.storage_condition}</p>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600 }}>
-                          Expiry: {new Date(don.estimated_expiry).toLocaleString()}
-                        </p>
-                        
-                        <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-primary" style={{ flex: 1, padding: '0.5rem 1rem' }} onClick={() => submitClaim(don.id)}>
-                            Request Food
-                          </button>
-                          <button className="btn btn-secondary" style={{ padding: '0.5rem' }} onClick={() => openChat(don.id, don.donor_id, don.donor_name)}>
-                            <MessageSquare size={16} />
-                          </button>
+              {loading ? <p>Loading...</p> : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                  {filteredFood.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>No surplus food matching filters found.</p> : 
+                    filteredFood.map(don => (
+                      <div key={don.id} className="food-card" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+                        <div className="food-card-img" style={{ backgroundImage: don.image_url ? `url(${don.image_url})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', height: '140px' }}>
+                          {!don.image_url && <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', fontSize: '3rem' }}>🍲</div>}
+                        </div>
+                        <div className="food-card-body" style={{ padding: '1.25rem' }}>
+                          <h4 className="food-card-title">{don.title}</h4>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>{don.description}</p>
+                          <p className="food-card-meta">
+                            <MapPin size={14} /> Located at: {don.city} (Exact address hidden for privacy)
+                          </p>
+
+                          <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: '0.65rem 0.8rem', borderRadius: '8px', margin: '0.75rem 0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 700 }}>Total Available:</span>
+                              <strong style={{ fontSize: '1rem', color: '#10b981' }}>{don.quantity} {don.quantity_unit}</strong>
+                            </div>
+                          </div>
+                          
+                          <div style={{ marginTop: '1.25rem' }}>
+                            <button 
+                              className="btn btn-primary" 
+                              style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', fontWeight: 700 }} 
+                              onClick={() => claimFood(don.id)}
+                            >
+                              Claim Food & Get Location
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                }
-              </div>
-
-              {/* Chat panel */}
-              {activeChatDonor && (
-                <div className="panel" style={{ marginTop: '2.5rem', animation: 'fadeUp 0.3s ease' }}>
-                  <h3 className="panel-title">
-                    <span>Chatting with Donor: {activeChatDonor.username}</span>
-                    <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setActiveChatDonor(null)}>Close</button>
-                  </h3>
-                  <div className="chat-window">
-                    <div className="chat-messages-container">
-                      {chatMessages.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Send a message to coordinate pickup location/details.</p> : 
-                        chatMessages.map(msg => (
-                          <div key={msg.id} className={`chat-bubble ${msg.sender_id === user.id ? 'sent' : 'received'}`}>
-                            {msg.message}
-                          </div>
-                        ))
-                      }
-                    </div>
-                    <form onSubmit={sendChatMessage} className="chat-input-row">
-                      <input type="text" className="chat-input" placeholder="Type a message..." value={chatText} onChange={e => setChatText(e.target.value)} />
-                      <button type="submit" className="btn btn-primary" style={{ borderRadius: '0' }}>Send</button>
-                    </form>
-                  </div>
+                    ))
+                  }
                 </div>
               )}
             </div>
           )}
 
-          {/* REQUESTS LIST TAB */}
-          {activeTab === 'requests' && (
+          {/* ACTIVE PICKUPS TAB */}
+          {activeTab === 'pickups' && (
             <div>
-              <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem' }}>Your Claim Requests</h3>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem' }}>Active Pickups</h3>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {myClaims.filter(c => c.status !== 'COMPLETED' && c.status !== 'CANCELLED').length === 0 ? (
+                  <p className="text-muted">No active pickups right now.</p>
+                ) : (
+                  myClaims.filter(c => c.status !== 'COMPLETED' && c.status !== 'CANCELLED').map(claim => (
+                    <div key={claim.id} style={{ padding: '1.5rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '16px', border: '1px solid var(--primary-color)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>{claim.donation_title}</h3>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Claimed At: {new Date(claim.claimed_at).toLocaleString()}</p>
+                        </div>
+                        <span style={{ padding: '0.4rem 0.8rem', backgroundColor: 'var(--primary-color)', color: 'white', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700 }}>
+                          {claim.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      
+                      <div style={{ padding: '1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: '8px', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <MapPin size={18} color="var(--danger)" />
+                          <strong>Pickup Address:</strong> {claim.donor_address}
+                        </div>
+                        <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                           <strong>Verification Code for Donor:</strong>
+                           <span style={{ letterSpacing: '2px', fontWeight: 900, color: 'var(--primary-color)', padding: '0.2rem 0.5rem', backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #ddd' }}>
+                              {claim.verification_code}
+                           </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {claim.status === 'CLAIMED' && (
+                          <button className="btn btn-primary" onClick={() => updateClaimStatus(claim.id, 'ON_THE_WAY')}>
+                            <Navigation size={16} /> Mark On the Way
+                          </button>
+                        )}
+                        {claim.status === 'ON_THE_WAY' && (
+                          <button className="btn btn-secondary" onClick={() => updateClaimStatus(claim.id, 'ARRIVED')}>
+                            <MapPin size={16} /> Mark Arrived
+                          </button>
+                        )}
+                        {claim.status === 'ARRIVED' && (
+                          <button className="btn btn-primary" onClick={() => {
+                             const code = prompt("Enter the verification code given by the donor (if any) or just your code to complete:");
+                             if(code) updateClaimStatus(claim.id, 'FOOD_COLLECTED', code);
+                          }}>
+                            <Package size={16} /> Complete Handover
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* HISTORY TAB */}
+          {activeTab === 'history' && (
+            <div>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem' }}>Pickup History</h3>
               <div className="panel">
                 <table className="custom-table">
                   <thead>
                     <tr>
-                      <th>Donation ID</th>
+                      <th>Claim ID</th>
                       <th>Food Item</th>
-                      <th>Donor Company</th>
-                      <th>Requested At</th>
+                      <th>Donor Name</th>
+                      <th>Date</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {myRequests.length === 0 ? (
+                    {myClaims.filter(c => c.status === 'COMPLETED' || c.status === 'CANCELLED').length === 0 ? (
                       <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No requests submitted.</td>
+                        <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No completed history.</td>
                       </tr>
                     ) : (
-                      myRequests.map(req => (
-                        <tr key={req.id}>
-                          <td>#{req.donation_id}</td>
-                          <td>{req.donation_title}</td>
-                          <td>{req.donor_name}</td>
-                          <td>{new Date(req.requested_at).toLocaleDateString()}</td>
-                          <td style={{ fontWeight: 700, color: req.status === 'accepted' ? 'var(--safe)' : req.status === 'pending' ? 'var(--warning)' : 'var(--danger)' }}>
-                            {req.status.toUpperCase()}
+                      myClaims.filter(c => c.status === 'COMPLETED' || c.status === 'CANCELLED').map(claim => (
+                        <tr key={claim.id}>
+                          <td>#{claim.id}</td>
+                          <td>{claim.donation_title}</td>
+                          <td>{claim.donor_name}</td>
+                          <td>{new Date(claim.claimed_at).toLocaleDateString()}</td>
+                          <td style={{ fontWeight: 700, color: claim.status === 'COMPLETED' ? 'var(--safe)' : 'var(--danger)' }}>
+                            {claim.status.toUpperCase()}
                           </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          )}
-
-          {/* VOLUNTEER & DELIVERIES TAB */}
-          {activeTab === 'deliveries' && (
-            <div>
-              <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem' }}>Active Delivery Tracking</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                
-                {/* Deliveries list */}
-                <div className="panel">
-                  <h4 style={{ marginBottom: '1rem' }}>Active Deliveries</h4>
-                  {myDeliveries.filter(d => d.tracking_status !== 'delivered').length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No active deliveries pending transit.</p>
-                  ) : (
-                    myDeliveries.filter(d => d.tracking_status !== 'delivered').map(del => (
-                      <div key={del.id} style={{ padding: '1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', marginBottom: '1rem', borderLeft: '4px solid var(--info)', cursor: 'pointer' }} onClick={() => handleSelectDelivery(del)}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <strong>{del.donation_title}</strong>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--info)', fontWeight: 700 }}>{del.tracking_status.toUpperCase()}</span>
-                        </div>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                          Volunteer: {del.volunteer_name || 'Not Assigned'}
-                        </p>
-                      </div>
-                    ))
-                  )}
-
-                  <h4 style={{ margin: '2rem 0 1rem 0' }}>Completed Deliveries</h4>
-                  {myDeliveries.filter(d => d.tracking_status === 'delivered').length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No completed deliveries log found.</p>
-                  ) : (
-                    myDeliveries.filter(d => d.tracking_status === 'delivered').map(del => (
-                      <div key={del.id} style={{ padding: '1rem', backgroundColor: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem', borderLeft: '4px solid var(--safe)' }}>
-                        <strong>{del.donation_title}</strong>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Completed: {new Date(del.completed_at).toLocaleString()}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Tracking/Checkpoint form */}
-                 {selectedDelivery && (
-                  <div className="panel">
-                    <h4 style={{ marginBottom: '1rem' }}>Delivery Details: {selectedDelivery.donation_title}</h4>
-                    
-                    <div style={{ marginBottom: '1.5rem' }}>
-                      <TrackingMap 
-                        key={selectedDelivery.id}
-                        delivery={selectedDelivery} 
-                        onLocationUpdate={handleLocationUpdate} 
-                        isEditable={selectedDelivery.tracking_status !== 'delivered'} 
-                      />
-                    </div>
-                    
-                    {deliveryError && <div style={{ color: 'var(--danger)', marginBottom: '1rem' }}>{deliveryError}</div>}
-                    {deliverySuccess && <div style={{ color: 'var(--safe)', marginBottom: '1rem' }}>{deliverySuccess}</div>}
-
-                    {/* Step 1: Assign volunteer details */}
-                    <form onSubmit={handleUpdateDelivery} style={{ marginBottom: '2rem' }}>
-                      <div className="form-group">
-                        <label className="form-label">Volunteer Driver Name</label>
-                        <input type="text" className="form-control" value={volunteerName} onChange={e => setVolunteerName(e.target.value)} placeholder="e.g. Rahul Sharma" />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Volunteer Phone Number</label>
-                        <input type="text" className="form-control" value={volunteerPhone} onChange={e => setVolunteerPhone(e.target.value)} placeholder="+91 9555555555" />
-                      </div>
-                      <button type="submit" className="btn btn-secondary" style={{ width: '100%' }}>
-                        Assign Volunteer / Pick Up Food
-                      </button>
-                    </form>
-
-                    {/* Step 2: Complete checkpoint with verification code */}
-                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-                      <h5 style={{ marginBottom: '0.5rem' }}>Complete Delivery Verification</h5>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                        Scan QR code or enter the unique verification key generated during donor matching:
-                      </p>
-                      
-                      <div className="form-group" style={{ display: 'flex', gap: '0.5rem' }}>
-                        <input type="text" className="form-control" placeholder="VRFY-XXXX" value={verifyCode} onChange={e => setVerifyCode(e.target.value)} />
-                        <button className="btn btn-primary" onClick={() => verifyAndCompleteDelivery(selectedDelivery.id)}>
-                          Verify Code
-                        </button>
-                      </div>
-                    </div>
-
-                  </div>
-                )}
-
               </div>
             </div>
           )}

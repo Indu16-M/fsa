@@ -153,6 +153,13 @@ const HomePage = () => {
     }
   ];
 
+  const [postTitle, setPostTitle] = useState('');
+  const [postCategory, setPostCategory] = useState('cooked');
+  const [postQuantity, setPostQuantity] = useState('50');
+  const [postUnit, setPostUnit] = useState('plates');
+  const [postDesc, setPostDesc] = useState('');
+  const [postSuccessMsg, setPostSuccessMsg] = useState('');
+
   useEffect(() => {
     fetchActiveDonations();
   }, []);
@@ -176,6 +183,57 @@ const HomePage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Live surplus post submit handler
+  const handleAddNewPost = (e) => {
+    e.preventDefault();
+    if (!postTitle || !postQuantity) return;
+
+    const newPost = {
+      id: Date.now(),
+      title: postTitle,
+      category: postCategory,
+      food_type: postCategory,
+      quantity: `${postQuantity} ${postUnit}`,
+      quantity_raw: parseFloat(postQuantity),
+      quantity_unit: postUnit,
+      donor_name: user?.username ? `${user.username} (You)` : 'Grand Hotel Indiranagar (You)',
+      address: 'Indiranagar 100ft Road, Bengaluru',
+      risk_level: 'Safe',
+      remaining_hours: 12,
+      image_emoji: postCategory === 'cooked' ? '🍲' : postCategory === 'produce' ? '🍎' : postCategory === 'dairy' ? '🥛' : postCategory === 'bakery' ? '🎂' : '📦',
+      description: postDesc || `Freshly prepared ${postTitle} surplus items.`
+    };
+
+    setActiveDonations(prev => [newPost, ...prev]);
+    setPostSuccessMsg('Food surplus posted successfully! Redirecting to Tab 2 Active Posts...');
+    
+    setTimeout(() => {
+      setPostTitle('');
+      setPostDesc('');
+      setPostQuantity('50');
+      setPostSuccessMsg('');
+      setSelectedCategory('all'); // Switch to Tab 2
+    }, 600);
+  };
+
+  const handleAcceptItemOnHome = (itemId, neededQty) => {
+    setActiveDonations(prevList => 
+      prevList.map(don => {
+        if (don.id === itemId) {
+          const currentTotal = don.quantity_raw !== undefined ? don.quantity_raw : (parseFloat(don.quantity) || 50);
+          const remaining = Math.max(0, currentTotal - neededQty);
+          return {
+            ...don,
+            quantity_raw: remaining,
+            quantity: `${remaining} ${don.quantity_unit || 'plates'}`
+          };
+        }
+        return don;
+      })
+    );
+    alert(`Accepted ${neededQty} plates! Post remaining capacity updated.`);
   };
 
   const filteredItems = activeDonations.filter(item => {
@@ -213,48 +271,67 @@ const HomePage = () => {
       
       {/* NAVBAR */}
       <header className="navbar" style={{ background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #1e293b' }}>
-        <div className="logo" style={{ fontSize: '1.4rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          🍲 FoodShare AI
+        <div className="logo" style={{ fontSize: '1.4rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+          🍲 ShareBite AI
         </div>
 
-        <div className="nav-links" style={{ gap: '1rem' }}>
+
+        <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {/* Explicit Role Dashboard Links */}
+          <button 
+            onClick={() => navigate(token && user?.role === 'donor' ? '/donor' : '/login')} 
+            className="btn btn-secondary" 
+            style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', fontWeight: 700 }}
+          >
+            🏨 Donor Dashboard
+          </button>
+
+          <button 
+            onClick={() => navigate(token && user?.role === 'ngo' ? '/ngo' : '/login')} 
+            className="btn btn-secondary" 
+            style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px', fontWeight: 700 }}
+          >
+            🍲 NGO Dashboard
+          </button>
+
+          <button 
+            onClick={() => navigate(token && user?.role === 'admin' ? '/admin' : '/login')} 
+            className="btn btn-secondary" 
+            style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '10px', fontWeight: 700 }}
+          >
+            🛡️ Admin Dashboard
+          </button>
+
           <button 
             onClick={() => navigate('/tracking')} 
             className="btn btn-primary" 
-            style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#3b82f6', borderColor: '#3b82f6', borderRadius: '10px' }}
+            style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: '#3b82f6', borderColor: '#3b82f6', borderRadius: '10px' }}
           >
-            🗺️ Live Delivery Map
-          </button>
-
-          <button 
-            onClick={() => navigate('/mobile')} 
-            className="btn btn-secondary" 
-            style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid #334155', borderRadius: '10px' }}
-          >
-            📱 Mobile App
+            🗺️ Live Map
           </button>
 
           {token ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <button onClick={() => navigate(user?.role === 'donor' ? '/donor' : user?.role === 'ngo' ? '/ngo' : '/admin')} className="btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', borderRadius: '10px' }}>
-                Dashboard ({user?.username})
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button onClick={() => navigate(user?.role === 'donor' ? '/donor' : user?.role === 'ngo' ? '/ngo' : '/admin')} className="btn btn-primary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', borderRadius: '10px' }}>
+                My Profile ({user?.username})
               </button>
-              <button onClick={logout} className="btn btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', borderRadius: '10px' }}>
+              <button onClick={logout} className="btn btn-secondary" style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', borderRadius: '10px' }}>
                 Log Out
               </button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => navigate('/login')} className="btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '10px' }}>
+              <button onClick={() => navigate('/login')} className="btn btn-primary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '10px' }}>
                 <LogIn size={15} /> Log In
               </button>
-              <button onClick={() => navigate('/register')} className="btn btn-secondary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '10px' }}>
+              <button onClick={() => navigate('/register')} className="btn btn-secondary" style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '10px' }}>
                 <UserPlus size={15} /> Register
               </button>
             </div>
           )}
         </div>
       </header>
+
 
       {/* HERO BANNER */}
       <div style={{
@@ -321,256 +398,267 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* 5 MAIN INTERACTIVE FOOD CATEGORY SQUARES */}
-      <div style={{ maxWidth: '1300px', margin: '0 auto', padding: '3rem 1.5rem' }}>
+
+
+      {/* SIDEBAR TABS & MAIN DASHBOARD SECTION (FULL SCREEN) */}
+      <div id="food-listings-section" style={{ width: '100%', maxWidth: '100%', padding: '1.5rem', minHeight: 'calc(100vh - 70px)' }}>
         
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f8fafc' }}>
-            Explore Food Categories
-          </h2>
-          <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginTop: '0.25rem' }}>
-            Click on any food category square to filter available surplus food items & AI predictions
-          </p>
-        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '1.5rem', minHeight: 'calc(100vh - 120px)', width: '100%' }}>
+          
+          {/* SIDEBAR NAV */}
+          <aside style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', height: 'fit-content' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8', marginBottom: '0.5rem' }}>
+              📌 SIDEBAR TABS
+            </div>
 
-        {/* 5 Squares Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '1.5rem'
-        }}>
-          {foodCategories.map(cat => {
-            const isSelected = selectedCategory === cat.id;
-            return (
-              <div
-                key={cat.id}
-                onClick={() => handleCategoryClick(cat.id)}
-                style={{
-                  background: cat.bgGradient,
-                  borderRadius: '20px',
-                  padding: '1.75rem 1.25rem',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  border: isSelected ? '3px solid #ffffff' : '1px solid rgba(255,255,255,0.15)',
-                  boxShadow: isSelected ? `0 12px 30px ${cat.color}66` : '0 6px 20px rgba(0,0,0,0.3)',
-                  transform: isSelected ? 'scale(1.03)' : 'scale(1)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justify: 'space-between',
-                  minHeight: '220px',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-              >
-                {/* Background Icon Aura */}
-                <div style={{ position: 'absolute', right: '-10px', bottom: '-10px', opacity: 0.15 }}>
-                  {cat.icon}
-                </div>
-
-                <div>
-                  <div style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '14px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                    backdropFilter: 'blur(8px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justify: 'center',
-                    marginBottom: '1rem',
-                    boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
-                  }}>
-                    {cat.icon}
-                  </div>
-
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 0.25rem 0' }}>
-                    {cat.name}
-                  </h3>
-
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, backgroundColor: 'rgba(255,255,255,0.2)', padding: '0.15rem 0.5rem', borderRadius: '6px', display: 'inline-block', marginBottom: '0.5rem' }}>
-                    {cat.count}
-                  </div>
-
-                  <p style={{ fontSize: '0.8rem', opacity: 0.9, lineHeight: 1.4 }}>
-                    {cat.desc}
-                  </p>
-                </div>
-
-                <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700 }}>
-                  <span>View Items</span> <ArrowRight size={14} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Category reset pill */}
-        {selectedCategory !== 'all' && (
-          <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-            <button 
-              onClick={() => setSelectedCategory('all')}
+            <div 
+              onClick={() => setSelectedCategory('post')}
               style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                border: '1px solid #475569',
-                color: '#fff',
-                padding: '0.4rem 1rem',
-                borderRadius: '20px',
-                fontSize: '0.85rem',
-                cursor: 'pointer'
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                backgroundColor: selectedCategory === 'post' ? '#10b981' : 'rgba(255,255,255,0.05)',
+                color: selectedCategory === 'post' ? '#ffffff' : '#cbd5e1',
+                border: '1px solid #334155'
               }}
             >
-              Showing category: <strong>{foodCategories.find(c => c.id === selectedCategory)?.name}</strong> (Click to view all)
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* FEATURED FOOD SURPLUS LISTINGS GRID */}
-      <div id="food-listings-section" style={{ maxWidth: '1300px', margin: '0 auto', padding: '1rem 1.5rem 4rem 1.5rem' }}>
-        
-        {/* Search & Filter Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc' }}>
-              Available Food Surplus Items
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-              Click any item card to request food, view AI shelf-life, or track live map
-            </p>
-          </div>
-
-          <div style={{ position: 'relative', width: '320px' }}>
-            <input 
-              type="text" 
-              placeholder="Search surplus meals, bakery, fruits..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.65rem 1rem 0.65rem 2.5rem',
-                borderRadius: '12px',
-                backgroundColor: '#1e293b',
-                border: '1px solid #334155',
-                color: '#fff',
-                fontSize: '0.85rem'
-              }}
-            />
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#94a3b8' }} />
-          </div>
-        </div>
-
-        {/* Cards Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: '1.5rem'
-        }}>
-          {filteredItems.length === 0 ? (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#94a3b8', backgroundColor: '#1e293b', borderRadius: '16px' }}>
-              No surplus food found matching search query. Try selecting a different category square above.
+              <Utensils size={20} color={selectedCategory === 'post' ? '#fff' : '#10b981'} /> Tab 1: Post Food Surplus
             </div>
-          ) : (
-            filteredItems.map(item => (
-              <div 
-                key={item.id}
-                onClick={() => handleItemClick(item)}
-                style={{
-                  backgroundColor: '#1e293b',
-                  borderRadius: '18px',
-                  border: '1px solid #334155',
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-                {/* Header Banner */}
-                <div style={{
-                  height: '140px',
-                  backgroundColor: '#0f172a',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justify: 'center',
-                  fontSize: '4rem',
-                  position: 'relative',
-                  background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)'
-                }}>
-                  {item.image_emoji || '🍲'}
 
-                  {/* Risk Badge */}
-                  <span style={{
-                    position: 'absolute',
-                    top: '12px',
-                    right: '12px',
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '99px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    backgroundColor: item.risk_level === 'High Risk' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                    color: item.risk_level === 'High Risk' ? '#ef4444' : '#10b981',
-                    border: `1px solid ${item.risk_level === 'High Risk' ? '#ef4444' : '#10b981'}`
-                  }}>
-                    {item.risk_level || 'Safe'}
-                  </span>
-                </div>
+            <div 
+              onClick={() => setSelectedCategory('all')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                backgroundColor: selectedCategory !== 'post' ? '#3b82f6' : 'rgba(255,255,255,0.05)',
+                color: selectedCategory !== 'post' ? '#ffffff' : '#cbd5e1',
+                border: '1px solid #334155'
+              }}
+            >
+              <Package size={20} color={selectedCategory !== 'post' ? '#fff' : '#3b82f6'} /> Tab 2: View Active Posts ({filteredItems.length})
+            </div>
 
-                {/* Body Content */}
-                <div style={{ padding: '1.25rem' }}>
-                  <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc', marginBottom: '0.4rem' }}>
-                    {item.title}
-                  </h4>
+            <div 
+              onClick={() => navigate('/tracking')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.85rem 1rem',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                color: '#cbd5e1',
+                border: '1px solid #334155'
+              }}
+            >
+              <MapPin size={20} color="#f59e0b" /> Tab 3: Live Delivery Map
+            </div>
+          </aside>
 
-                  <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.75rem', lineHeight: 1.4 }}>
-                    {item.description}
-                  </p>
+          {/* MAIN CONTENT AREA */}
+          <main style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', padding: '2rem' }}>
+            
+            {/* TAB 1: POST FOOD SURPLUS */}
+            {selectedCategory === 'post' ? (
+              <div>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc', marginBottom: '0.5rem' }}>
+                  ➕ Tab 1: List Surplus Food
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                  Fill out the surplus details below to make food available for NGOs and food shelters.
+                </p>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <MapPin size={14} style={{ color: '#ef4444' }} /> {item.donor_name || item.address}
-                    </div>
+                {postSuccessMsg && (
+                  <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', fontWeight: 700 }}>
+                    ✓ {postSuccessMsg}
+                  </div>
+                )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#f59e0b' }}>
-                      <Clock size={14} /> AI Remaining Shelf Life: ~{item.remaining_hours || item.remaining_shelf_life_hours || 12} Hours
+                <form onSubmit={handleAddNewPost} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.4rem' }}>Food Title / Item Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 50 Plates Rice & Curry" 
+                      required 
+                      value={postTitle}
+                      onChange={e => setPostTitle(e.target.value)}
+                      style={{ width: '100%', padding: '0.75rem', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }} 
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.4rem' }}>Food Category</label>
+                    <select 
+                      value={postCategory}
+                      onChange={e => setPostCategory(e.target.value)}
+                      style={{ width: '100%', padding: '0.75rem', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                    >
+                      <option value="cooked">Cooked Meals</option>
+                      <option value="produce">Fresh Produce</option>
+                      <option value="dairy">Dairy & Milk</option>
+                      <option value="bakery">Bakery & Bread</option>
+                      <option value="packaged">Packaged Goods</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.4rem' }}>Capacity Available (Plates/kg)</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input 
+                        type="number" 
+                        value={postQuantity}
+                        onChange={e => setPostQuantity(e.target.value)}
+                        required 
+                        style={{ flex: 1, padding: '0.75rem', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }} 
+                      />
+                      <select 
+                        value={postUnit}
+                        onChange={e => setPostUnit(e.target.value)}
+                        style={{ padding: '0.75rem', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                      >
+                        <option value="plates">plates</option>
+                        <option value="kg">kg</option>
+                        <option value="portions">portions</option>
+                      </select>
                     </div>
                   </div>
 
-                  {/* Action Footer Button */}
-                  <button 
-                    type="button"
-                    style={{
-                      width: '100%',
-                      padding: '0.6rem',
-                      backgroundColor: '#10b981',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '10px',
-                      fontWeight: 800,
-                      fontSize: '0.85rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justify: 'center',
-                      gap: '0.4rem'
-                    }}
-                  >
-                    View Food Details & Claim <ArrowRight size={14} />
-                  </button>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.4rem' }}>Surplus Description</label>
+                    <textarea 
+                      placeholder="e.g. Freshly cooked biryani and raita, prepared 1 hour ago."
+                      value={postDesc}
+                      onChange={e => setPostDesc(e.target.value)}
+                      style={{ width: '100%', padding: '0.75rem', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff', height: '80px' }}
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <button type="submit" style={{ width: '100%', padding: '0.85rem', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '1rem', cursor: 'pointer' }}>
+                      Publish Food Surplus to Platform
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+
+              /* TAB 2: ACTIVE POSTS (Y ROWS x 2 COLUMNS GRID) */
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc' }}>
+                      📦 Tab 2: Active Surplus Posts ({filteredItems.length})
+                    </h3>
+                    <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                      Displaying in <strong>Y (Unlimited Rows) × 2 Columns Layout</strong> with Accept / Reject buttons
+                    </p>
+                  </div>
+
+                  <input 
+                    type="text" 
+                    placeholder="Search surplus meals..." 
+                    value={searchQuery} 
+                    onChange={e => setSearchQuery(e.target.value)} 
+                    style={{ padding: '0.6rem 1rem', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff', width: '240px' }} 
+                  />
+                </div>
+
+                {/* Y x 2 COLUMNS GRID */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem' }}>
+                  {filteredItems.map(item => (
+                    <div 
+                      key={item.id} 
+                      style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '16px', padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                          <h4 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>{item.title}</h4>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.6rem', borderRadius: '99px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981' }}>
+                            {item.risk_level || 'Safe'}
+                          </span>
+                        </div>
+
+                        <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.75rem' }}>{item.description}</p>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.75rem' }}>
+                          <MapPin size={14} style={{ color: '#ef4444' }} /> {item.donor_name || item.address}
+                        </div>
+
+                        {/* Interactive Quantity Needed & Available Capacity Box */}
+                        <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.65rem 0.8rem', borderRadius: '8px', margin: '0.75rem 0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 700 }}>📦 Total Available:</span>
+                            <strong style={{ fontSize: '1rem', color: '#10b981' }}>{item.quantity}</strong>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed rgba(16, 185, 129, 0.3)', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1' }}>Quantity Needed:</label>
+                            <input 
+                              id={`qty-input-${item.id}`}
+                              type="number" 
+                              defaultValue="20" 
+                              min="1" 
+                              style={{ width: '70px', padding: '0.2rem 0.4rem', backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '6px', color: '#fff', textAlign: 'center', fontWeight: 700 }} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Accept and Reject Action Buttons */}
+                      <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #334155', display: 'flex', gap: '0.75rem' }}>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            const inputEl = document.getElementById(`qty-input-${item.id}`);
+                            const qty = inputEl ? parseFloat(inputEl.value) || 20 : 20;
+                            handleAcceptItemOnHome(item.id, qty);
+                          }}
+                          style={{ flex: 1, backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '0.6rem', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          ✓ Accept
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setActiveDonations(prev => prev.filter(d => d.id !== item.id));
+                            alert('Post rejected/dismissed.');
+                          }}
+                          style={{ flex: 1, backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '0.6rem', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))
-          )}
+            )}
+
+          </main>
         </div>
 
       </div>
 
       {/* FOOTER */}
       <footer style={{ backgroundColor: '#090d16', borderTop: '1px solid #1e293b', padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.85rem', color: '#64748b' }}>
-        <div>🍲 <strong>FoodShare AI Platform</strong> — AI-Powered Food Waste Reduction & Live Dispatch System</div>
+        <div>🍲 <strong>ShareBite AI Platform</strong> — AI-Powered Food Waste Reduction & Live Dispatch System</div>
       </footer>
+
 
     </div>
   );

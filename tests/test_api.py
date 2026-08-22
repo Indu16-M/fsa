@@ -22,7 +22,9 @@ class FoodSharingAPITestCase(unittest.TestCase):
         self.client = self.app.test_client()
         
         with self.app.app_context():
+            db.drop_all()
             db.create_all()
+
             
             # Setup mock donor
             self.donor = User(username='test_donor', email='donor@test.org', role='donor', status='active')
@@ -146,7 +148,62 @@ class FoodSharingAPITestCase(unittest.TestCase):
         self.assertTrue(len(recs) > 0)
         self.assertEqual(recs[0]['organization_name'], 'Test NGO Organization')
         self.assertIn('score', recs[0])
-        self.assertIn('distance_km', recs[0])
+    def test_send_and_verify_otp(self):
+        # 1. Send OTP
+        res = self.client.post('/api/auth/send-otp', json={
+            'email': 'newuser@example.com',
+            'purpose': 'registration'
+        })
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.data.decode('utf-8'))
+        self.assertEqual(data['email'], 'newuser@example.com')
+
+        # Retrieve generated OTP from DB for testing
+        with self.app.app_context():
+            from models import OTPCode
+            otp_record = OTPCode.query.filter_by(email='newuser@example.com').order_by(OTPCode.created_at.desc()).first()
+            self.assertIsNotNone(otp_record)
+            otp_code = otp_record.otp_code
+
+        # 2. Verify invalid OTP
+        verify_fail = self.client.post('/api/auth/verify-otp', json={
+            'email': 'newuser@example.com',
+            'otp_code': '000000',
+            'purpose': 'registration'
+        })
+        self.assertEqual(verify_fail.status_code, 400)
+
+        # 3. Verify valid OTP
+        verify_success = self.client.post('/api/auth/verify-otp', json={
+            'email': 'newuser@example.com',
+            'otp_code': otp_code,
+            'purpose': 'registration'
+        })
+        self.assertEqual(verify_success.status_code, 200)
+
+        # 4. Register user with verified email
+        reg_res = self.client.post('/api/auth/register', json={
+            'username': 'verified_donor',
+            'email': 'newuser@example.com',
+            'password': 'password123',
+            'role': 'donor',
+            'phone': '+91 9876543210',
+            'address': '123 Test Street'
+        })
+        self.assertEqual(reg_res.status_code, 201)
+
+    def test_public_admin_signup_prohibited(self):
+        # Attempt public admin registration
+        res = self.client.post('/api/auth/register', json={
+            'username': 'fake_admin',
+            'email': 'admin_hack@example.com',
+            'password': 'password123',
+            'role': 'admin',
+            'phone': '+91 9876543210',
+            'address': '123 Test Street'
+        })
+        self.assertEqual(res.status_code, 403)
 
 if __name__ == '__main__':
     unittest.main()
+

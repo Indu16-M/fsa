@@ -15,8 +15,23 @@ CREATE TABLE IF NOT EXISTS users (
     address VARCHAR(255) DEFAULT '',
     phone VARCHAR(20) DEFAULT '',
     status ENUM('active', 'pending_approval', 'suspended') DEFAULT 'active',
+    is_email_verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- OTP Codes Table (For real email verification)
+CREATE TABLE IF NOT EXISTS otp_codes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(150) NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    purpose VARCHAR(50) DEFAULT 'registration',
+    attempts INT DEFAULT 0,
+    is_verified BOOLEAN DEFAULT FALSE,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_otp_email (email)
+);
+
 
 -- NGO Profiles Table (For NGOs specifically)
 CREATE TABLE IF NOT EXISTS ngo_profiles (

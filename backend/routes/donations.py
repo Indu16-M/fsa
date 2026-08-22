@@ -121,7 +121,7 @@ def create_donation():
         estimated_expiry=estimated_expiry,
         remaining_shelf_life_hours=round(remaining_shelf_life, 2),
         risk_level=risk_level,
-        status='available',
+        status='AVAILABLE',
         image_url=image_url
     )
     
@@ -166,7 +166,7 @@ def create_donation():
 @donations_bp.route('', methods=['GET'])
 def get_donations():
     # Public route to get available food items
-    status_filter = request.args.get('status', 'available')
+    status_filter = request.args.get('status', 'AVAILABLE')
     food_type_filter = request.args.get('food_type')
     
     query = FoodDonation.query.filter_by(status=status_filter)
@@ -193,8 +193,26 @@ def donation_history():
 @donations_bp.route('/<int:donation_id>', methods=['GET'])
 @jwt_required()
 def get_donation_detail(donation_id):
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
     donation = FoodDonation.query.get_or_404(donation_id)
-    return jsonify(donation.to_dict()), 200
+    
+    data = donation.to_dict()
+    
+    # Security: Hide exact location from Receivers and NGOs unless they have a claim for it
+    if user and user.role in ['receiver', 'ngo']:
+        has_claim = False
+        for claim in donation.claims:
+            if claim.user_id == user_id and claim.status not in ['CANCELLED']:
+                has_claim = True
+                break
+                
+        if not has_claim:
+            data['donor_address'] = ''
+            data['donor_latitude'] = 0.0
+            data['donor_longitude'] = 0.0
+            
+    return jsonify(data), 200
 
 @donations_bp.route('/<int:donation_id>/status', methods=['PATCH'])
 @jwt_required()
@@ -233,3 +251,90 @@ def update_status(donation_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f"Failed to update status: {str(e)}"}), 500
+
+@donations_bp.route('/impact', methods=['GET'])
+@jwt_required()
+def get_donor_impact():
+    donor_id = int(get_jwt_identity())
+    
+    # Calculate statistics based on actual donations
+    donations = FoodDonation.query.filter_by(donor_id=donor_id).all()
+    
+    total_donations = len(donations)
+    total_kg_saved = sum(d.quantity for d in donations if d.quantity_unit.lower() == 'kg' and d.status in ['completed', 'delivered', 'picked_up'])
+    total_meals_shared = int(total_kg_saved * 4) # Assuming 1 kg ~ 4 meals on average if not specified
+    
+    # Just a placeholder for "People Helped", could be based on meals
+    people_helped = int(total_meals_shared * 1.2)
+    
+    # Calculate monthly data for chart (simple mock aggregation)
+    from collections import defaultdict
+    monthly_data = defaultdict(int)
+    for d in donations:
+        month_str = d.created_at.strftime('%b %Y')
+        monthly_data[month_str] += 1
+        
+    return jsonify({
+        'totalDonations': total_donations,
+        'foodSavedKg': round(total_kg_saved, 2),
+        'mealsShared': total_meals_shared,
+        'peopleHelped': people_helped,
+        'monthlyChartData': [{'month': k, 'donations': v} for k, v in monthly_data.items()]
+    }), 200
+
+@donations_bp.route('/requests', methods=['GET'])
+@jwt_required()
+def get_donor_requests():
+    from models import DonationRequest
+    donor_id = int(get_jwt_identity())
+    
+    # Fetch all requests made to donations owned by this donor
+    requests = db.session.query(DonationRequest).join(FoodDonation).filter(FoodDonation.donor_id == donor_id).order_by(DonationRequest.requested_at.desc()).all()
+    
+    return jsonify([req.to_dict() for req in requests]), 200
+
+@donations_bp.route('/requests/<int:req_id>', methods=['PATCH'])
+@jwt_required()
+def manage_donation_request(req_id):
+    from models import DonationRequest
+    donor_id = int(get_jwt_identity())
+    
+    req = DonationRequest.query.get_or_404(req_id)
+    donation = FoodDonation.query.get(req.donation_id)
+    
+    if donation.donor_id != donor_id:
+        return jsonify({'message': 'Unauthorized'}), 403
+        
+    data = request.get_json() or {}
+    new_status = data.get('status')
+    
+    if new_status not in ['accepted', 'rejected']:
+        return jsonify({'message': 'Invalid status'}), 400
+        
+    req.status = new_status
+    
+    try:
+        # If accepted, mark the donation as requested/accepted and reject others
+        if new_status == 'accepted':
+            donation.status = 'accepted'
+            other_requests = DonationRequest.query.filter(DonationRequest.donation_id == donation.id, DonationRequest.id != req.id).all()
+            for other in other_requests:
+                other.status = 'rejected'
+                
+            # Create a notification for the NGO
+            notif = Notification(
+                user_id=req.ngo_id,
+                type='request_accepted',
+                title='Donation Request Accepted',
+                message=f"Your request for '{donation.title}' was accepted! Please coordinate pickup."
+            )
+            db.session.add(notif)
+            
+        db.session.commit()
+        return jsonify({
+            'message': f"Request {new_status} successfully.",
+            'request': req.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f"Failed to update request: {str(e)}"}), 500

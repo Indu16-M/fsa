@@ -31,3 +31,18 @@ class Config:
     # AI/ML Saved Model Paths
     ML_MODEL_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'ml', 'expiry_model.joblib')
     FORECAST_MODEL_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'ml', 'forecast_model.joblib')
+
+    # SMTP Email Configuration (Empty by default so no real emails are sent to user inbox)
+    SMTP_SERVER = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
+    SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
+    SMTP_SENDER_EMAIL = os.environ.get('SMTP_SENDER_EMAIL', '')
+
+
+    # OTP Security Parameters
+    OTP_EXPIRY_MINUTES = int(os.environ.get('OTP_EXPIRY_MINUTES', '5'))
+    OTP_MAX_ATTEMPTS = int(os.environ.get('OTP_MAX_ATTEMPTS', '3'))
+    OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get('OTP_RESEND_COOLDOWN_SECONDS', '60'))
+
+

@@ -80,6 +80,31 @@ const AdminDashboard = () => {
     }
   };
 
+  // NGO Approval Filter & State
+  const [allNgos, setAllNgos] = useState([]);
+  const [ngoFilter, setNgoFilter] = useState('pending_approval'); // 'pending_approval', 'active', 'rejected'
+  const [selectedNgoDetails, setSelectedNgoDetails] = useState(null);
+  const [rejectionModalNgo, setRejectionModalNgo] = useState(null);
+  const [rejectionInputReason, setRejectionInputReason] = useState('');
+
+  const fetchAllNgos = async () => {
+    try {
+      const res = await fetch('/api/admin/ngos/all', { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setAllNgos(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchAllNgos();
+    }
+  }, [token]);
+
   // Approve pending NGO
   const approveNGO = async (ngoId) => {
     try {
@@ -88,8 +113,9 @@ const AdminDashboard = () => {
         headers: getAuthHeaders()
       });
       if (res.ok) {
-        alert('NGO verified and activated!');
+        alert('NGO application approved successfully!');
         fetchPendingNgos();
+        fetchAllNgos();
         fetchUsers();
         fetchStats();
       }
@@ -97,6 +123,30 @@ const AdminDashboard = () => {
       console.error(err);
     }
   };
+
+  // Reject NGO with reason
+  const rejectNGO = async (ngoId) => {
+    const reason = prompt("Enter reason for rejection:");
+    if (!reason) return;
+    try {
+      const res = await fetch(`/api/admin/ngos/${ngoId}/reject`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ rejection_reason: reason })
+      });
+      if (res.ok) {
+        alert('NGO application rejected and notification saved.');
+        fetchPendingNgos();
+        fetchAllNgos();
+        fetchUsers();
+        fetchStats();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+
 
   // Export report files
   const downloadReport = async (format) => {
@@ -133,7 +183,8 @@ const AdminDashboard = () => {
     <div className="app-container">
       {/* Navbar */}
       <header className="navbar">
-        <div className="logo">🍲 FoodShare AI</div>
+        <div className="logo" style={{ fontWeight: 800 }}>🍲 ShareBite AI</div>
+
         <div className="nav-links">
           <span style={{ fontWeight: 600 }}>Hello, {user?.username} (Admin)</span>
           <button onClick={logout} className="btn btn-secondary" style={{ padding: '0.4rem 1rem' }}>Log Out</button>
@@ -278,54 +329,60 @@ const AdminDashboard = () => {
               {activeTab === 'users' && (
                 <div className="panel">
                   <h3 className="panel-title">System Accounts</h3>
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Username</th>
-                        <th>Email</th>
-                        <th>Role</th>
-                        <th>Location Coordinate</th>
-                        <th>Phone</th>
-                        <th>Account Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {usersList.map(item => (
-                        <tr key={item.id}>
-                          <td>#{item.id}</td>
-                          <td>{item.username}</td>
-                          <td>{item.email}</td>
-                          <td>
-                            <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.85rem' }}>
-                              {item.role}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
-                          </td>
-                          <td>{item.phone || '-'}</td>
-                          <td>
-                            <span className={`food-card-badge ${item.status === 'active' ? 'risk-safe' : 'risk-high'}`}>
-                              {item.status}
-                            </span>
-                          </td>
-                          <td>
-                            {item.id !== user.id && (
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '0.25rem 0.5rem', color: item.status === 'active' ? 'var(--danger)' : 'var(--safe)' }}
-                                onClick={() => toggleUserStatus(item.id, item.status)}
-                              >
-                                <UserX size={16} /> {item.status === 'active' ? 'Suspend' : 'Activate'}
-                              </button>
-                            )}
-                          </td>
+                  {!Array.isArray(usersList) || usersList.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No users found.</p>
+                  ) : (
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Username</th>
+                          <th>Email</th>
+                          <th>Role</th>
+                          <th>Location Coordinates</th>
+                          <th>Phone</th>
+                          <th>Account Status</th>
+                          <th>Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {usersList.map(item => (
+                          <tr key={item.id}>
+                            <td>#{item.id}</td>
+                            <td>{item.username || '-'}</td>
+                            <td>{item.email || '-'}</td>
+                            <td>
+                              <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                                {item.role || 'USER'}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              {item.latitude != null && item.longitude != null && !isNaN(Number(item.latitude)) && !isNaN(Number(item.longitude))
+                                ? `${Number(item.latitude).toFixed(4)}, ${Number(item.longitude).toFixed(4)}`
+                                : 'Not set'}
+                            </td>
+                            <td>{item.phone || '-'}</td>
+                            <td>
+                              <span className={`food-card-badge ${item.status === 'active' ? 'risk-safe' : 'risk-high'}`}>
+                                {item.status || 'unknown'}
+                              </span>
+                            </td>
+                            <td>
+                              {item.id !== user?.id && (
+                                <button 
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '0.25rem 0.5rem', color: item.status === 'active' ? 'var(--danger)' : 'var(--safe)' }}
+                                  onClick={() => toggleUserStatus(item.id, item.status)}
+                                >
+                                  <UserX size={16} /> {item.status === 'active' ? 'Suspend' : 'Activate'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
 
@@ -365,10 +422,16 @@ const AdminDashboard = () => {
                               ) : '-'}
                             </td>
                             <td>
-                              <button className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => approveNGO(ngo.id)}>
-                                Verify & Approve
-                              </button>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} onClick={() => approveNGO(ngo.id)}>
+                                  Verify & Approve
+                                </button>
+                                <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', color: 'var(--danger)', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => rejectNGO(ngo.id)}>
+                                  Reject
+                                </button>
+                              </div>
                             </td>
+
                           </tr>
                         ))}
                       </tbody>
