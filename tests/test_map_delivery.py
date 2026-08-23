@@ -8,7 +8,7 @@ import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), '../backend'))
 
 from app import create_app, db
-from models import User, FoodDonation, DonationRequest, Delivery, NgoProfile, calculate_haversine_distance
+from models import User, FoodDonation, FoodClaim, NgoProfile, calculate_haversine_distance
 
 class MapDeliveryTestCase(unittest.TestCase):
     """
@@ -27,7 +27,6 @@ class MapDeliveryTestCase(unittest.TestCase):
         with self.app.app_context():
             db.drop_all()
             db.create_all()
-
             
             # Setup Donor (Koramangala, Bengaluru: 12.9352, 77.6245)
             self.donor = User(
@@ -76,10 +75,11 @@ class MapDeliveryTestCase(unittest.TestCase):
             db.close_all_sessions()
             db.drop_all()
 
-    def get_token(self, username, password):
-        response = self.client.post('/api/auth/login', json={
-            'username': username,
-            'password': password
+    def get_token(self, email, password, role):
+        response = self.client.post('/api/auth/password-login', json={
+            'email': email,
+            'password': password,
+            'role': role
         })
         data = json.loads(response.data.decode('utf-8'))
         return data.get('token')
@@ -93,7 +93,7 @@ class MapDeliveryTestCase(unittest.TestCase):
 
     def test_user_location_update_endpoint(self):
         """2. Test updating user pin location on map via /api/auth/location"""
-        token = self.get_token('donor_swiggy', 'donorpass123')
+        token = self.get_token('donor@swiggy.test', 'donorpass123', 'donor')
         headers = {'Authorization': f'Bearer {token}'}
 
         payload = {
@@ -107,10 +107,10 @@ class MapDeliveryTestCase(unittest.TestCase):
         self.assertEqual(data['user']['latitude'], 12.9250)
         self.assertEqual(data['user']['address'], 'Jayanagar 4th Block, Bengaluru')
 
-    def test_full_donation_request_and_delivery_lifecycle(self):
-        """3. Test end-to-end request -> approval -> delivery creation with OTP verification code"""
-        donor_token = self.get_token('donor_swiggy', 'donorpass123')
-        ngo_token = self.get_token('ngo_zomato', 'ngopass123')
+    def test_food_claim_pickup_flow(self):
+        """3. Test food claim pickup and OTP verification flow"""
+        donor_token = self.get_token('donor@swiggy.test', 'donorpass123', 'donor')
+        ngo_token = self.get_token('ngo@zomato.test', 'ngopass123', 'ngo')
         
         d_headers = {'Authorization': f'Bearer {donor_token}'}
         n_headers = {'Authorization': f'Bearer {ngo_token}'}
@@ -127,99 +127,33 @@ class MapDeliveryTestCase(unittest.TestCase):
         self.assertEqual(don_res.status_code, 201)
         donation_id = json.loads(don_res.data.decode('utf-8'))['donation']['id']
 
-        # Step 2: NGO requests food
-        req_res = self.client.post('/api/ngo/requests', json={'donation_id': donation_id}, headers=n_headers)
-        self.assertEqual(req_res.status_code, 201)
-        request_id = json.loads(req_res.data.decode('utf-8'))['request']['id']
+        # Step 2: NGO claims the food
+        claim_res = self.client.post(f'/api/claims/{donation_id}/claim', headers=n_headers)
+        self.assertEqual(claim_res.status_code, 201)
+        claim_data = json.loads(claim_res.data.decode('utf-8'))['claim']
+        claim_id = claim_data['id']
+        vcode = claim_data['verification_code']
+        self.assertTrue(vcode.startswith('VRFY-'))
 
-        # Step 3: Donor approves request -> triggers Delivery object creation
-        appr_res = self.client.post(f'/api/ngo/requests/{request_id}/approve', headers=d_headers)
-        self.assertEqual(appr_res.status_code, 200)
-        deliv_data = json.loads(appr_res.data.decode('utf-8'))['delivery']
-        
-        self.assertEqual(deliv_data['tracking_status'], 'assigned')
-        self.assertTrue(deliv_data['verification_code'].startswith('VRFY-'))
-        self.assertIn('distance_km', deliv_data)
-        self.assertIn('eta_minutes', deliv_data)
-
-    def test_live_delivery_location_tracking_update(self):
-        """4. Test live driver coordinate updates on tracking map"""
-        donor_token = self.get_token('donor_swiggy', 'donorpass123')
-        ngo_token = self.get_token('ngo_zomato', 'ngopass123')
-        d_headers = {'Authorization': f'Bearer {donor_token}'}
-        n_headers = {'Authorization': f'Bearer {ngo_token}'}
-
-        # Create & approve delivery
-        don_res = self.client.post('/api/donations', data={
-            'title': 'Paneer Curry Bowls',
-            'food_type': 'cooked',
-            'quantity': '20',
-            'storage_condition': 'refrigerated',
-            'temperature_celsius': '4.0',
-            'prep_time': datetime.datetime.utcnow().isoformat()
-        }, headers=d_headers)
-        don_id = json.loads(don_res.data.decode('utf-8'))['donation']['id']
-
-        req_res = self.client.post('/api/ngo/requests', json={'donation_id': don_id}, headers=n_headers)
-        req_id = json.loads(req_res.data.decode('utf-8'))['request']['id']
-
-        appr_res = self.client.post(f'/api/ngo/requests/{req_id}/approve', headers=d_headers)
-        delivery_id = json.loads(appr_res.data.decode('utf-8'))['delivery']['id']
-
-        # Update live driver location coordinates (midway)
-        midway_lat = 12.9550
-        midway_lon = 77.6320
-        loc_res = self.client.patch(f'/api/ngo/deliveries/{delivery_id}/location', json={
-            'latitude': midway_lat,
-            'longitude': midway_lon
+        # Step 3: Update status to ON_THE_WAY
+        status_res = self.client.patch(f'/api/claims/{claim_id}/status', json={
+            'status': 'ON_THE_WAY'
         }, headers=n_headers)
+        self.assertEqual(status_res.status_code, 200)
 
-        self.assertEqual(loc_res.status_code, 200)
-        updated_deliv = json.loads(loc_res.data.decode('utf-8'))['delivery']
-        self.assertEqual(updated_deliv['current_latitude'], midway_lat)
-        self.assertEqual(updated_deliv['current_longitude'], midway_lon)
-
-    def test_verification_code_delivery_completion(self):
-        """5. Test delivery completion requires correct OTP verification code"""
-        donor_token = self.get_token('donor_swiggy', 'donorpass123')
-        ngo_token = self.get_token('ngo_zomato', 'ngopass123')
-        d_headers = {'Authorization': f'Bearer {donor_token}'}
-        n_headers = {'Authorization': f'Bearer {ngo_token}'}
-
-        # Create & approve delivery
-        don_res = self.client.post('/api/donations', data={
-            'title': 'Rice Bowls Batch',
-            'food_type': 'cooked',
-            'quantity': '30',
-            'storage_condition': 'ambient',
-            'temperature_celsius': '22.0',
-            'prep_time': datetime.datetime.utcnow().isoformat()
-        }, headers=d_headers)
-        don_id = json.loads(don_res.data.decode('utf-8'))['donation']['id']
-
-        req_res = self.client.post('/api/ngo/requests', json={'donation_id': don_id}, headers=n_headers)
-        req_id = json.loads(req_res.data.decode('utf-8'))['request']['id']
-
-        appr_res = self.client.post(f'/api/ngo/requests/{req_id}/approve', headers=d_headers)
-        deliv = json.loads(appr_res.data.decode('utf-8'))['delivery']
-        deliv_id = deliv['id']
-        vcode = deliv['verification_code']
-
-        # Attempt completing delivery with WRONG code -> 400 Failure
-        fail_res = self.client.patch(f'/api/ngo/deliveries/{deliv_id}', json={
-            'tracking_status': 'delivered',
-            'verification_code': 'WRONG-1234'
+        # Step 4: Complete claim with WRONG code -> 400 Failure
+        fail_res = self.client.patch(f'/api/claims/{claim_id}/status', json={
+            'status': 'FOOD_COLLECTED',
+            'verification_code': 'WRONGCODE'
         }, headers=n_headers)
         self.assertEqual(fail_res.status_code, 400)
 
-        # Attempt completing delivery with CORRECT code -> 200 Success
-        pass_res = self.client.patch(f'/api/ngo/deliveries/{deliv_id}', json={
-            'tracking_status': 'delivered',
+        # Step 5: Complete claim with CORRECT code -> 200 Success
+        pass_res = self.client.patch(f'/api/claims/{claim_id}/status', json={
+            'status': 'FOOD_COLLECTED',
             'verification_code': vcode
         }, headers=n_headers)
         self.assertEqual(pass_res.status_code, 200)
-        completed_deliv = json.loads(pass_res.data.decode('utf-8'))['delivery']
-        self.assertEqual(completed_deliv['tracking_status'], 'delivered')
 
 if __name__ == '__main__':
     unittest.main()

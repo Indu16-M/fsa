@@ -24,7 +24,6 @@ class FoodSharingAPITestCase(unittest.TestCase):
         with self.app.app_context():
             db.drop_all()
             db.create_all()
-
             
             # Setup mock donor
             self.donor = User(username='test_donor', email='donor@test.org', role='donor', status='active')
@@ -55,38 +54,40 @@ class FoodSharingAPITestCase(unittest.TestCase):
             db.close_all_sessions()
             db.drop_all()
 
-    def get_token(self, username, password):
-        response = self.client.post('/api/auth/login', json={
-            'username': username,
-            'password': password
+    def get_token(self, email, password, role):
+        response = self.client.post('/api/auth/password-login', json={
+            'email': email,
+            'password': password,
+            'role': role
         })
         data = json.loads(response.data.decode('utf-8'))
         return data.get('token')
 
     def test_user_login(self):
         # Successful login
-        response = self.client.post('/api/auth/login', json={
-            'username': 'test_donor',
-            'password': 'password123'
+        response = self.client.post('/api/auth/password-login', json={
+            'email': 'donor@test.org',
+            'password': 'password123',
+            'role': 'donor'
         })
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data.decode('utf-8'))
         self.assertIn('token', data)
-        self.assertEqual(data['user']['username'], 'test_donor')
+        self.assertEqual(data['user']['email'], 'donor@test.org')
 
         # Invalid credentials login
-        response = self.client.post('/api/auth/login', json={
-            'username': 'test_donor',
-            'password': 'wrongpassword'
+        response = self.client.post('/api/auth/password-login', json={
+            'email': 'donor@test.org',
+            'password': 'wrongpassword',
+            'role': 'donor'
         })
         self.assertEqual(response.status_code, 401)
 
     def test_create_donation_and_ai_expiry(self):
-        token = self.get_token('test_donor', 'password123')
+        token = self.get_token('donor@test.org', 'password123', 'donor')
         headers = {'Authorization': f'Bearer {token}'}
         
         # Post a food donation
-        # Simulate form payload since endpoint supports multipart for images
         payload = {
             'title': 'Test Tomato Soup',
             'description': 'Fresh homemade vegetable soup',
@@ -104,7 +105,6 @@ class FoodSharingAPITestCase(unittest.TestCase):
         self.assertEqual(data['donation']['title'], 'Test Tomato Soup')
         self.assertIn('remaining_shelf_life_hours', data['donation'])
         self.assertIn('risk_level', data['donation'])
-        self.assertIn('qr_code_data', data['donation'])
 
     def test_manual_ai_prediction_endpoint(self):
         payload = {
@@ -119,12 +119,10 @@ class FoodSharingAPITestCase(unittest.TestCase):
         data = json.loads(response.data.decode('utf-8'))
         self.assertIn('predicted_remaining_shelf_life_hours', data)
         self.assertIn('risk_level', data)
-        
-        # Dairy at ambient in high heat should result in lower shelf life (High Risk classification)
         self.assertEqual(data['risk_level'], 'High Risk')
 
     def test_ngo_recommendation_matching_scores(self):
-        token = self.get_token('test_donor', 'password123')
+        token = self.get_token('donor@test.org', 'password123', 'donor')
         headers = {'Authorization': f'Bearer {token}'}
         
         # 1. Create a donation first
@@ -148,62 +146,24 @@ class FoodSharingAPITestCase(unittest.TestCase):
         self.assertTrue(len(recs) > 0)
         self.assertEqual(recs[0]['organization_name'], 'Test NGO Organization')
         self.assertIn('score', recs[0])
-    def test_send_and_verify_otp(self):
-        # 1. Send OTP
-        res = self.client.post('/api/auth/send-otp', json={
-            'email': 'newuser@example.com',
-            'purpose': 'registration'
-        })
-        self.assertEqual(res.status_code, 200)
-        data = json.loads(res.data.decode('utf-8'))
-        self.assertEqual(data['email'], 'newuser@example.com')
 
-        # Retrieve generated OTP from DB for testing
-        with self.app.app_context():
-            from models import OTPCode
-            otp_record = OTPCode.query.filter_by(email='newuser@example.com').order_by(OTPCode.created_at.desc()).first()
-            self.assertIsNotNone(otp_record)
-            otp_code = otp_record.otp_code
-
-        # 2. Verify invalid OTP
-        verify_fail = self.client.post('/api/auth/verify-otp', json={
-            'email': 'newuser@example.com',
-            'otp_code': '000000',
-            'purpose': 'registration'
+    def test_register_donor(self):
+        # Register a new donor
+        response = self.client.post('/api/auth/register-donor', json={
+            'name': 'New Donor Name',
+            'email': 'new_donor@example.com',
+            'phone': '+91 9988776655',
+            'password': 'securepass123',
+            'donorType': 'Individual',
+            'address': 'Koramangala 1st Block',
+            'city': 'Bengaluru',
+            'state': 'Karnataka',
+            'pincode': '560034'
         })
-        self.assertEqual(verify_fail.status_code, 400)
-
-        # 3. Verify valid OTP
-        verify_success = self.client.post('/api/auth/verify-otp', json={
-            'email': 'newuser@example.com',
-            'otp_code': otp_code,
-            'purpose': 'registration'
-        })
-        self.assertEqual(verify_success.status_code, 200)
-
-        # 4. Register user with verified email
-        reg_res = self.client.post('/api/auth/register', json={
-            'username': 'verified_donor',
-            'email': 'newuser@example.com',
-            'password': 'password123',
-            'role': 'donor',
-            'phone': '+91 9876543210',
-            'address': '123 Test Street'
-        })
-        self.assertEqual(reg_res.status_code, 201)
-
-    def test_public_admin_signup_prohibited(self):
-        # Attempt public admin registration
-        res = self.client.post('/api/auth/register', json={
-            'username': 'fake_admin',
-            'email': 'admin_hack@example.com',
-            'password': 'password123',
-            'role': 'admin',
-            'phone': '+91 9876543210',
-            'address': '123 Test Street'
-        })
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.data.decode('utf-8'))
+        self.assertIn('token', data)
+        self.assertEqual(data['user']['email'], 'new_donor@example.com')
 
 if __name__ == '__main__':
     unittest.main()
-
