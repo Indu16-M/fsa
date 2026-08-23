@@ -328,6 +328,23 @@ const DonateFoodFlow = ({ onComplete, onCancel }) => {
             <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }} onClick={handleAiCheck} disabled={loading || !imageFile}>
               {loading ? 'Analyzing Freshness...' : 'Start AI Scan & Check'}
             </button>
+            <button 
+              type="button"
+              className="btn btn-secondary" 
+              style={{ width: '100%', marginTop: '0.75rem', backgroundColor: 'var(--bg-tertiary, #f1f5f9)', border: '1px solid var(--border-color, #e2e8f0)', color: 'var(--text-primary, #0f172a)', fontWeight: 'bold' }} 
+              onClick={() => {
+                setAiAnalysis({
+                  freshness: 'Good',
+                  status: 'Passed (Manual Bypass)',
+                  confidence: '100% (Manual)',
+                  recommendation: 'Manually verified by donor. Handle and distribute normally.'
+                });
+                handleNext();
+              }}
+              disabled={loading}
+            >
+              Skip Scanner (Bypass AI)
+            </button>
           </div>
         )}
 

@@ -197,6 +197,11 @@ const Register = () => {
                 placeholder="you@domain.com"
                 disabled={isOtpVerified}
               />
+              {email.toLowerCase().includes('gamil.com') && (
+                <div style={{ color: '#b45309', fontSize: '0.75rem', fontWeight: 650, marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  ⚠️ Did you mean <strong style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => setEmail(email.toLowerCase().replace('gamil.com', 'gmail.com'))}>gmail.com</strong>? Click to fix.
+                </div>
+              )}
             </div>
           </div>
 

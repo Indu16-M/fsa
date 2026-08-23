@@ -181,6 +181,11 @@ const DonorRegistrationModal = ({ isOpen, onClose, onSuccess }) => {
                   onChange={(e) => setEmail(e.target.value)}
                   style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none' }}
                 />
+                {email.toLowerCase().includes('gamil.com') && (
+                  <div style={{ color: '#b45309', fontSize: '0.75rem', fontWeight: 650, marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    ⚠️ Did you mean <strong style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => setEmail(email.toLowerCase().replace('gamil.com', 'gmail.com'))}>gmail.com</strong>? Click to fix.
+                  </div>
+                )}
               </div>
 
               <div>
