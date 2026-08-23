@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { MapPin, Navigation, CheckCircle, ArrowLeft, AlertTriangle, Clock, ShieldCheck, UserCheck } from 'lucide-react';
@@ -122,7 +122,13 @@ const NgoPickupMap = () => {
     });
     window.L.marker([donorLat, donorLon], { icon: donorIcon })
       .addTo(map)
-      .bindPopup(`<b>Donor Pickup Spot</b><br/>${claim?.donor_address || claim?.donation_title || 'Pickup Spot'}`)
+      .bindPopup(`
+        <div style="font-family: Inter, sans-serif; padding: 2px;">
+          <b style="font-size: 14px; color: #111827;">Donor Pickup Spot</b><br/>
+          <span style="font-size: 12px; color: #6b7280; display: block; margin-top: 2px; margin-bottom: 6px;">${claim?.donor_address || claim?.donation_title || 'Pickup Spot'}</span>
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${donorLat},${donorLon}${ngoMemberPos ? `&origin=${ngoMemberPos.lat},${ngoMemberPos.lon}` : ''}" target="_blank" rel="noopener noreferrer" style="background-color: #10b981; color: white !important; font-weight: 700; text-decoration: none; padding: 4px 8px; border-radius: 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🚗 Get Directions</a>
+        </div>
+      `)
       .openPopup();
 
     // NGO Member pin (Blue)
@@ -306,16 +312,45 @@ const NgoPickupMap = () => {
       </div>
 
       {/* Exact Unlocked Pickup Address */}
-      <div style={{ padding: '1.3rem 1.6rem', backgroundColor: 'var(--bg-secondary, #ffffff)', border: '1px solid var(--border-color, #e5e7eb)', borderRadius: '14px', display: 'flex', alignItems: 'flex-start', gap: '0.9rem' }}>
-        <MapPin size={22} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
-            Exact Donor Pickup Address
-          </div>
-          <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary, #111827)' }}>
-            {claim.donor_address || 'Address provided upon assignment'}
+      <div style={{ padding: '1.3rem 1.6rem', backgroundColor: 'var(--bg-secondary, #ffffff)', border: '1px solid var(--border-color, #e5e7eb)', borderRadius: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.9rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.9rem', flex: 1 }}>
+          <MapPin size={22} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
+              Exact Donor Pickup Address
+            </div>
+            <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary, #111827)' }}>
+              {claim.donor_address || 'Address provided upon assignment'}
+            </div>
           </div>
         </div>
+        <button 
+          onClick={() => {
+            const destLat = resolvedDonorCoords?.lat || claim?.donor_latitude || 12.9716;
+            const destLon = resolvedDonorCoords?.lon || claim?.donor_longitude || 77.5946;
+            let url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLon}`;
+            if (ngoMemberPos) {
+              url += `&origin=${ngoMemberPos.lat},${ngoMemberPos.lon}`;
+            }
+            window.open(url, '_blank');
+          }}
+          style={{ 
+            backgroundColor: '#10b981', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px', 
+            padding: '0.6rem 1rem', 
+            fontSize: '0.85rem', 
+            fontWeight: 700, 
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            boxShadow: '0 4px 6px rgba(16, 185, 129, 0.15)'
+          }}
+        >
+          <Navigation size={15} style={{ transform: 'rotate(45deg)' }} /> Get Directions
+        </button>
       </div>
 
       {/* Handover Verification Code */}

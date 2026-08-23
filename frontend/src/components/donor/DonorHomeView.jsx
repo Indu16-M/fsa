@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Utensils, TrendingUp, Users, ArrowRight } from 'lucide-react';
+import { Package, Utensils, TrendingUp, Users, ArrowRight, MapPin, Navigation } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const DonorHomeView = ({ onChangeView }) => {
@@ -12,6 +12,72 @@ const DonorHomeView = ({ onChangeView }) => {
   });
   const [activeDonations, setActiveDonations] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastStatus, setBroadcastStatus] = useState('');
+
+  const handleBroadcastLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setBroadcasting(true);
+    setBroadcastStatus('Acquiring GPS coordinates...');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setBroadcastStatus('Resolving physical address...');
+        
+        let address = `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.display_name) {
+              address = data.display_name;
+            }
+          }
+        } catch (err) {
+          console.error("Nominatim reverse geocoding failed", err);
+        }
+
+        setBroadcastStatus('Broadcasting location to system...');
+        try {
+          const res = await fetch('/api/auth/location', {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': getAuthHeaders().Authorization
+            },
+            body: JSON.stringify({
+              latitude: lat,
+              longitude: lon,
+              address
+            })
+          });
+          if (res.ok) {
+            setBroadcastStatus('Broadcast active! Location shared successfully.');
+            setTimeout(() => {
+              setBroadcasting(false);
+              setBroadcastStatus('');
+            }, 3000);
+          } else {
+            setBroadcastStatus('Failed to update live location.');
+            setTimeout(() => setBroadcasting(false), 3000);
+          }
+        } catch (err) {
+          setBroadcastStatus('Network error occurred.');
+          setTimeout(() => setBroadcasting(false), 3000);
+        }
+      },
+      (err) => {
+        setBroadcastStatus('Access Denied. Enable browser location permissions.');
+        setTimeout(() => setBroadcasting(false), 3000);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
     fetchImpact();
@@ -93,6 +159,69 @@ const DonorHomeView = ({ onChangeView }) => {
             <p>People Helped</p>
           </div>
         </div>
+      </div>
+
+      {/* Live GPS Broadcaster */}
+      <div className="panel broadcast-panel" style={{ 
+        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.08))', 
+        border: '1px solid rgba(16, 185, 129, 0.25)', 
+        borderRadius: '16px', 
+        padding: '1.5rem', 
+        marginBottom: '2rem', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '1.25rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: '280px' }}>
+          <div style={{ 
+            width: '50px', 
+            height: '50px', 
+            borderRadius: '50%', 
+            backgroundColor: broadcasting ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.1)', 
+            color: broadcasting ? '#10b981' : '#3b82f6', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            position: 'relative'
+          }}>
+            {broadcasting ? (
+              <Navigation size={22} style={{ transform: 'rotate(45deg)', animation: 'pulse 1.5s infinite' }} />
+            ) : (
+              <MapPin size={22} />
+            )}
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 750 }}>
+              {broadcasting ? 'Broadcasting Live Location' : 'Broadcast Live GPS Location'}
+            </h3>
+            <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
+              {broadcasting ? (
+                <span style={{ color: '#10b981', fontWeight: 600 }}>{broadcastStatus}</span>
+              ) : (
+                'Enable receivers and pickup partners to track your exact location for handovers.'
+              )}
+            </p>
+          </div>
+        </div>
+        <button 
+          className="btn btn-primary" 
+          onClick={handleBroadcastLocation} 
+          disabled={broadcasting}
+          style={{ 
+            backgroundColor: broadcasting ? '#10b981' : '#3b82f6',
+            borderColor: broadcasting ? '#10b981' : '#3b82f6',
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.5rem',
+            padding: '0.75rem 1.25rem',
+            fontSize: '0.9rem',
+            fontWeight: 700
+          }}
+        >
+          {broadcasting ? 'Sharing...' : 'Share My GPS'}
+        </button>
       </div>
 
       {/* Quick Actions & Active Donations */}
