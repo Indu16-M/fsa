@@ -105,6 +105,14 @@ const Login = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('expired') === 'true') {
+      setError('Your login session has expired. Please log in again.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // Registration modals
   const [isNgoModalOpen, setIsNgoModalOpen] = useState(false);
   const [isDonorModalOpen, setIsDonorModalOpen] = useState(false);
